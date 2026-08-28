@@ -28,6 +28,26 @@ from shared.repository import InMemorySnapshotRepository
 
 TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
+MODULES = "defaultKeyStatistics,financialData,summaryProfile"
+
+MODULE_CANDIDATES: dict[str, tuple[str, str]] = {
+    "pb": ("defaultKeyStatistics", "priceToBook"),
+    "ev_ebitda": ("defaultKeyStatistics", "enterpriseToEbitda"),
+    "dividend_yield": ("defaultKeyStatistics", "dividendYield"),
+    "quarter": ("defaultKeyStatistics", "mostRecentQuarter"),
+    "roe": ("financialData", "returnOnEquity"),
+    "gross_margin": ("financialData", "grossMargins"),
+    "ebitda_margin": ("financialData", "ebitdaMargins"),
+}
+"""Where the fields missing from the default payload appear to live.
+
+Unverified against a real plan — proving or disproving this table is the entire
+point of the `modules` probe below. Nothing in `brapi.py` reads it yet.
+"""
+
+NET_DEBT_INPUTS = ("totalDebt", "totalCash", "ebitda")
+"""`net_debt_to_ebitda` has no direct key; it would be derived from these."""
+
 
 def report_raw_response(client: httpx.Client, token: str, ticker: str) -> dict[str, Any]:
     """Fetch once, unmapped, and show what brapi really sends back."""
@@ -73,6 +93,51 @@ def report_mapping(result: dict[str, Any]) -> list[str]:
             missing.append(field)
 
     return missing
+
+
+def report_modules(client: httpx.Client, token: str, ticker: str) -> None:
+    """The open question: does this plan include the `modules` blocks?
+
+    Costs a second request against the free-tier quota. Worth it — the answer
+    decides whether we rewrite the mapping or take on bolsai as a second provider.
+    """
+    print(f"\n=== modules probe: {MODULES} ===\n")
+    response = client.get(
+        f"{DEFAULT_BASE_URL}/quote/{ticker}",
+        params={"token": token, "modules": MODULES},
+    )
+    print(f"HTTP {response.status_code} {response.reason_phrase}")
+
+    if response.status_code != httpx.codes.OK:
+        print(f"  body: {response.text[:500]}")
+        print("\n  VERDICT: modules are NOT available on this plan.")
+        print("  The 5 missing indicators must come from bolsai instead.")
+        return
+
+    results = response.json().get("results") or [{}]
+    result: dict[str, Any] = results[0]
+    blocks = {key: value for key, value in result.items() if isinstance(value, dict)}
+
+    if not blocks:
+        print("  200 OK, but no nested module objects came back.")
+        print("\n  VERDICT: modules are silently ignored on this plan.")
+        return
+
+    print(f"  blocks returned: {', '.join(sorted(blocks))}")
+    print("\nCandidate mapping for the missing fields:")
+    for field, (module, key) in MODULE_CANDIDATES.items():
+        value = blocks.get(module, {}).get(key)
+        if value is None:
+            print(f"  MISSING  {field:<20} <- {module}.{key}")
+        else:
+            print(f"  FOUND    {field:<20} <- {module}.{key:<22} = {value}")
+
+    financial = blocks.get("financialData", {})
+    present = [key for key in NET_DEBT_INPUTS if financial.get(key) is not None]
+    print(
+        f"\n  net_debt_to_ebitda inputs present: {present or 'none'}"
+        f" (need all of {', '.join(NET_DEBT_INPUTS)})"
+    )
 
 
 def report_snapshot(provider: BrapiProvider, ticker: str) -> None:
@@ -131,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         missing = report_mapping(result)
+        report_modules(client, token, ticker)
 
         provider = BrapiProvider(client, token=token)
         try:
