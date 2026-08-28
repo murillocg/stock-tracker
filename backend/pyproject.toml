@@ -1,0 +1,70 @@
+[project]
+name = "stock-tracker-backend"
+version = "0.1.0"
+description = "Collector and read API for the stock tracker (AWS Lambda)."
+requires-python = ">=3.13"
+
+# Runtime dependencies. These are the ones that get packaged into the Lambda Layer,
+# so the list is deliberately short: every megabyte here is cold-start time.
+dependencies = [
+    "pydantic>=2.9",
+    "httpx>=0.27",
+    "boto3>=1.35",
+]
+
+[project.optional-dependencies]
+# Never shipped to Lambda. `boto3-stubs` exists only so mypy knows the shape of the
+# DynamoDB Table resource; it is imported under `if TYPE_CHECKING:` and costs nothing
+# at runtime.
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "boto3-stubs[dynamodb]>=1.35",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# `src` layout: the importable top-level packages are `shared`, `collector`, `api`.
+# `shared` maps 1:1 to the Lambda Layer, which is unpacked at /opt/python/ — so
+# `import shared.models` resolves identically on a laptop and inside Lambda.
+packages = ["src/shared", "src/collector", "src/api"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort (import ordering)
+    "N",    # pep8-naming
+    "UP",   # pyupgrade — keeps us on modern syntax
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+
+[tool.pydantic-mypy]
+# Without `init_typed`, the plugin types every model constructor argument as `Any`,
+# so `Stock(market="BOVESPA")` would slip past mypy and only blow up at runtime.
+init_typed = true
+init_forbid_extra = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `src` so `import shared` resolves; `.` so tests can import their own helpers via
+# `tests.conftest`. This is the virtualenv's answer to the JVM classpath.
+pythonpath = ["src", "."]
