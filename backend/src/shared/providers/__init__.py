@@ -2,6 +2,7 @@
 
 from shared.providers.brapi import BrapiProvider
 from shared.providers.errors import (
+    AuthenticationError,
     MalformedResponseError,
     ProviderError,
     ProviderUnavailableError,
@@ -12,6 +13,7 @@ from shared.providers.protocol import QuoteProvider
 from shared.providers.quote import ProviderQuote
 
 __all__ = [
+    "AuthenticationError",
     "BrapiProvider",
     "MalformedResponseError",
     "ProviderError",

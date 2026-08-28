@@ -20,7 +20,13 @@ from pydantic import computed_field
 from shared.config import Config
 from shared.indicators import apply_changes, compute_changes
 from shared.models import CamelModel, DailySnapshot, ListType, ProviderName, Stock
-from shared.providers import ProviderError, QuoteProvider, TickerNotFoundError, get_provider
+from shared.providers import (
+    AuthenticationError,
+    ProviderError,
+    QuoteProvider,
+    TickerNotFoundError,
+    get_provider,
+)
 from shared.providers.factory import build_registry
 from shared.repository import (
     DynamoDbSnapshotRepository,
@@ -151,9 +157,11 @@ def collect_all(
     rate limits are the binding constraint, not wall-clock time.
 
     Provider failures are contained per ticker: one dead symbol must not cost the
-    other nineteen. Repository failures are deliberately *not* caught — if
-    DynamoDB is down the run is worthless, and letting it raise is what gets the
-    Lambda retried.
+    other nineteen. Two kinds are deliberately *not* contained, because both make
+    the rest of the run pointless and should fail loudly instead:
+
+    - `AuthenticationError` — every remaining ticker would fail identically.
+    - repository errors — if DynamoDB is down there is nowhere to put the data.
 
     `sleep` is injected so tests run instantly instead of actually waiting.
     """
@@ -172,6 +180,12 @@ def collect_all(
             provider = get_provider(registry, stock.provider)
             called_provider = True
             snapshot = collect_one(stock, provider=provider, snapshots=snapshots, as_of=as_of)
+        except AuthenticationError:
+            # Listed first because it is a subclass of ProviderError and `except`
+            # clauses are tried in order — the generic handler below would
+            # otherwise swallow it. Same rule as Java's catch blocks.
+            logger.error("Provider credentials rejected — aborting the run at %s", stock.ticker)
+            raise
         except TickerNotFoundError as exc:
             logger.warning("Ticker %s unknown to %s: %s", stock.ticker, stock.provider, exc)
             results.append(

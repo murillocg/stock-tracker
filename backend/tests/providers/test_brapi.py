@@ -9,6 +9,7 @@ import pytest
 
 from shared.models import ProviderName
 from shared.providers import (
+    AuthenticationError,
     BrapiProvider,
     MalformedResponseError,
     ProviderUnavailableError,
@@ -95,6 +96,24 @@ def test_the_token_is_sent_as_a_query_parameter() -> None:
 
     assert seen[0].params["token"] == "test-token"
     assert seen[0].path == "/api/quote/PETR4"
+
+
+@pytest.mark.parametrize("code", [httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN])
+def test_rejected_credentials_are_their_own_error(code: int) -> None:
+    """brapi answers 401 MISSING_TOKEN for every non-demo ticker without a token.
+
+    It must not be reported as a malformed response: the fix is a new token, not
+    a mapping bug, and the run should stop rather than retry 19 more times.
+    """
+    with pytest.raises(AuthenticationError):
+        build_provider(status(code)).fetch_quote("WEGE3")
+
+
+def test_a_401_is_not_treated_as_retryable() -> None:
+    with pytest.raises(AuthenticationError) as caught:
+        build_provider(status(httpx.codes.UNAUTHORIZED)).fetch_quote("WEGE3")
+
+    assert not isinstance(caught.value, ProviderUnavailableError)
 
 
 def test_a_404_becomes_ticker_not_found() -> None:

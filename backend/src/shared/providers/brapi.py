@@ -7,6 +7,7 @@ import httpx
 
 from shared.models import ProviderName
 from shared.providers.errors import (
+    AuthenticationError,
     MalformedResponseError,
     ProviderUnavailableError,
     TickerNotFoundError,
@@ -14,6 +15,22 @@ from shared.providers.errors import (
 from shared.providers.quote import ProviderQuote
 
 DEFAULT_BASE_URL = "https://brapi.dev/api"
+
+PRICE_KEY = "regularMarketPrice"
+
+QUOTE_FIELD_MAP: dict[str, str] = {
+    "pe": "priceEarnings",
+    "pb": "priceToBook",
+    "ev_ebitda": "enterpriseValueToEbitda",
+    "roe": "returnOnEquity",
+    "net_debt_to_ebitda": "netDebtToEbitda",
+    "dividend_yield": "dividendYield",
+}
+"""`ProviderQuote` field -> brapi response key.
+
+Kept as data rather than buried in `_map` so `scripts/smoke_brapi.py` can report,
+against a live response, exactly which of these the free tier actually returns.
+"""
 
 
 def _to_decimal(value: Any) -> Decimal | None:
@@ -74,6 +91,13 @@ class BrapiProvider:
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(f"brapi request failed for {symbol}: {exc}") from exc
 
+        # Checked before the generic fallback below: brapi answers 401
+        # `MISSING_TOKEN` for every non-demo ticker when the token is absent or
+        # revoked, and calling that "malformed" would send us hunting the wrong bug.
+        if response.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
+            raise AuthenticationError(
+                f"brapi rejected our credentials (HTTP {response.status_code}) for {symbol}"
+            )
         if response.status_code == httpx.codes.NOT_FOUND:
             raise TickerNotFoundError(f"brapi does not know ticker {symbol}")
         if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
@@ -103,17 +127,14 @@ class BrapiProvider:
         if not isinstance(result, dict):
             raise MalformedResponseError(f"brapi result for {symbol} is not an object")
 
-        price = _to_decimal(result.get("regularMarketPrice"))
+        price = _to_decimal(result.get(PRICE_KEY))
         if price is None or price <= 0:
             raise MalformedResponseError(f"brapi returned no usable price for {symbol}")
 
-        return ProviderQuote(
-            ticker=result.get("symbol") or symbol,
-            price=price,
-            pe=_to_decimal(result.get("priceEarnings")),
-            pb=_to_decimal(result.get("priceToBook")),
-            ev_ebitda=_to_decimal(result.get("enterpriseValueToEbitda")),
-            roe=_to_decimal(result.get("returnOnEquity")),
-            net_debt_to_ebitda=_to_decimal(result.get("netDebtToEbitda")),
-            dividend_yield=_to_decimal(result.get("dividendYield")),
+        indicators = {field: _to_decimal(result.get(key)) for field, key in QUOTE_FIELD_MAP.items()}
+        # `model_validate` rather than the constructor: we are parsing a dict built
+        # from a mapping table, and mypy cannot prove a `dict[str, Decimal | None]`
+        # fits every keyword argument (`quarter` is a `str`). Validation still runs.
+        return ProviderQuote.model_validate(
+            {"ticker": result.get("symbol") or symbol, "price": price, **indicators}
         )

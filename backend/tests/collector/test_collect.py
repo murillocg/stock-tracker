@@ -20,6 +20,7 @@ from shared.models import (
     Stock,
 )
 from shared.providers import (
+    AuthenticationError,
     ProviderQuote,
     ProviderUnavailableError,
     QuoteProvider,
@@ -282,6 +283,25 @@ def test_a_failed_ticker_leaves_the_previous_state_alone() -> None:
     stored = stocks.get("PETR4")
     assert stored is not None
     assert stored.current == yesterday
+
+
+def test_rejected_credentials_abort_the_whole_run() -> None:
+    """A dead token is a run-level problem — do not spend 19 more calls proving it."""
+    provider = StubProvider(
+        {
+            "AAAA3": AuthenticationError("MISSING_TOKEN"),
+            "PETR4": build_quote("PETR4", "38.5"),
+        }
+    )
+
+    with pytest.raises(AuthenticationError):
+        run(
+            stocks=InMemoryStockRepository([build_stock("AAAA3"), build_stock("PETR4")]),
+            snapshots=InMemorySnapshotRepository(),
+            provider=provider,
+        )
+
+    assert provider.calls == ["AAAA3"]
 
 
 def test_an_unimplemented_provider_is_reported_not_raised() -> None:
