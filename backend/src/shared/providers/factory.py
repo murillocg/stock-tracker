@@ -1,5 +1,7 @@
 """Wiring: `ProviderName` -> a concrete `QuoteProvider`."""
 
+from collections.abc import Mapping
+
 import httpx
 
 from shared.config import Config
@@ -31,10 +33,15 @@ def build_registry(client: httpx.Client, config: Config) -> dict[ProviderName, Q
 
 
 def get_provider(
-    registry: dict[ProviderName, QuoteProvider],
+    registry: Mapping[ProviderName, QuoteProvider],
     name: ProviderName,
 ) -> QuoteProvider:
-    """Look one up, failing loudly instead of returning `None`."""
+    """Look one up, failing loudly instead of returning `None`.
+
+    Takes a `Mapping` rather than a `dict` because it only ever reads. `Mapping`
+    is the read-only supertype — roughly Guava's `ImmutableMap` as a *type* — so
+    any dict-like caller fits, and the signature promises we will not mutate it.
+    """
     provider = registry.get(name)
     if provider is None:
         raise UnsupportedProviderError(f"No provider implemented for {name}")
