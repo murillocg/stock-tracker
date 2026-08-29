@@ -37,15 +37,23 @@ data "aws_iam_policy_document" "github_assume_role" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Scoped to the main branch, not to the repository generally. On a public
-    # repo that distinction is the whole security boundary: anyone can open a
-    # pull request, and `repo:owner/name:*` would let a workflow running on an
-    # attacker's branch assume this role. Only pushes to main can, and only you
-    # can push to main.
+    # Scoped to one GitHub environment, not to the repository generally. On a
+    # public repo that distinction is the whole security boundary: anyone can open
+    # a pull request, and `repo:owner/name:*` would let a workflow on an
+    # attacker's branch assume this role.
+    #
+    # Note the subject is the ENVIRONMENT, not the branch. A job that declares
+    # `environment: production` presents `...:environment:production` instead of
+    # `...:ref:refs/heads/main` — the environment replaces the ref in the claim.
+    # Pinning the branch here fails with a bare "Not authorized to perform
+    # sts:AssumeRoleWithWebIdentity", which says nothing about why.
+    #
+    # The branch restriction still exists: it lives on the environment itself,
+    # which is configured to accept deployments only from main.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_owner}/${var.github_repo}:environment:production"]
     }
   }
 }
