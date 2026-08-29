@@ -110,9 +110,16 @@ variable "schedule_enabled" {
 }
 
 variable "provider_delay_seconds" {
-  description = "Pause between upstream calls. Sequential collection, free-tier rate limits."
+  description = <<-EOT
+    Pause before EVERY upstream call — not merely between tickers, because Alpha
+    Vantage serves both the quote and the fundamentals for a US stock and rejects
+    anything faster than one request per second.
+
+    1.5 rather than 1.0: the limit is stated as "1 request per second", so sitting
+    exactly on the boundary is asking to be throttled by clock skew alone.
+  EOT
   type        = number
-  default     = 1.0
+  default     = 1.5
 }
 
 variable "lambda_timeout_seconds" {

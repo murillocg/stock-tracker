@@ -606,3 +606,78 @@ def test_an_unknown_timezone_fails_loudly() -> None:
     """Proves the IANA database is actually reachable, not silently absent."""
     with pytest.raises(ZoneInfoNotFoundError):
         market_today("Mars/Olympus_Mons")
+
+
+# --- pacing ------------------------------------------------------------------
+
+
+def test_both_calls_for_one_stock_are_paced() -> None:
+    """Alpha Vantage serves the quote AND the fundamentals, and rejects anything
+    faster than one request a second. Pacing per ticker left them back to back."""
+    slept: list[float] = []
+
+    collect_all(
+        stocks=InMemoryStockRepository(
+            [build_stock("MSFT", fundamentals_provider=ProviderName.BOLSAI)]
+        ),
+        snapshots=InMemorySnapshotRepository(),
+        quote_registry={ProviderName.BRAPI: StubProvider({"MSFT": build_quote("MSFT", "513.53")})},
+        fundamentals_registry={
+            ProviderName.BOLSAI: StubFundamentalsProvider({"MSFT": build_fundamentals("MSFT")})
+        },
+        as_of=AS_OF,
+        delay_seconds=1.5,
+        sleep=slept.append,
+    )
+
+    # Two upstream calls, one gap between them.
+    assert slept == [1.5]
+
+
+def test_pacing_spans_tickers_as_well() -> None:
+    slept: list[float] = []
+    stocks = [
+        build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI),
+        build_stock("VALE3", fundamentals_provider=ProviderName.BOLSAI),
+    ]
+
+    collect_all(
+        stocks=InMemoryStockRepository(stocks),
+        snapshots=InMemorySnapshotRepository(),
+        quote_registry={
+            ProviderName.BRAPI: StubProvider(
+                {"PETR4": build_quote("PETR4", "43.55"), "VALE3": build_quote("VALE3", "78.58")}
+            )
+        },
+        fundamentals_registry={
+            ProviderName.BOLSAI: StubFundamentalsProvider(
+                {"PETR4": build_fundamentals("PETR4"), "VALE3": build_fundamentals("VALE3")}
+            )
+        },
+        as_of=AS_OF,
+        delay_seconds=1.5,
+        sleep=slept.append,
+    )
+
+    # 2 stocks x 2 calls = 4 calls, so 3 gaps.
+    assert slept == [1.5, 1.5, 1.5]
+
+
+def test_a_stock_without_fundamentals_costs_one_call() -> None:
+    slept: list[float] = []
+
+    collect_all(
+        stocks=InMemoryStockRepository([build_stock("USDBRL"), build_stock("PETR4")]),
+        snapshots=InMemorySnapshotRepository(),
+        quote_registry={
+            ProviderName.BRAPI: StubProvider(
+                {"USDBRL": build_quote("USDBRL", "5.42"), "PETR4": build_quote("PETR4", "43.55")}
+            )
+        },
+        fundamentals_registry={},
+        as_of=AS_OF,
+        delay_seconds=1.5,
+        sleep=slept.append,
+    )
+
+    assert slept == [1.5]

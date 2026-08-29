@@ -104,6 +104,30 @@ class CollectionReport(CamelModel):
         return {outcome.value: count for outcome, count in counts.items()}
 
 
+class Pacer:
+    """Spaces out upstream calls. One per run, shared by every provider.
+
+    The delay used to sit between *tickers*, which was wrong the moment a single
+    provider served both capabilities: brapi and bolsai are separate services, so
+    a quote and a fundamentals call could fire together harmlessly, but Alpha
+    Vantage answers both and rejects anything faster than one request a second.
+
+    Pacing every call rather than every ticker is correct for all of them, and
+    costs one extra second per stock on the Brazilian path.
+    """
+
+    def __init__(self, delay_seconds: float, sleep: Callable[[float], None]) -> None:
+        self._delay = delay_seconds
+        self._sleep = sleep
+        self._called = False
+
+    def wait(self) -> None:
+        """Pause before every call except the first of the run."""
+        if self._called:
+            self._sleep(self._delay)
+        self._called = True
+
+
 def market_today(timezone: str) -> dt.date:
     """Today's trading date in the market's own timezone, not the server's.
 
@@ -122,6 +146,7 @@ def market_today(timezone: str) -> dt.date:
 def fetch_fundamentals(
     stock: Stock,
     registry: Mapping[ProviderName, FundamentalsProvider],
+    pace: Pacer,
 ) -> ProviderFundamentals | None:
     """Fundamentals for one stock, or `None` if unavailable.
 
@@ -137,6 +162,7 @@ def fetch_fundamentals(
         return None
     try:
         provider = get_provider(registry, stock.fundamentals_provider)
+        pace.wait()
         return provider.fetch_fundamentals(stock.ticker)
     except AuthenticationError:
         raise
@@ -177,6 +203,7 @@ def collect_one(
     fundamentals: ProviderFundamentals | None,
     snapshots: SnapshotRepository,
     as_of: dt.date,
+    pace: Pacer | None = None,
 ) -> DailySnapshot:
     """FETCH then COMPUTE for a single stock. Does not persist anything.
 
@@ -184,6 +211,8 @@ def collect_one(
     dividends paid. `peg` is left for the category rulesets, which decide whether
     a 5-year CAGR is the right denominator for the stock in question.
     """
+    if pace is not None:
+        pace.wait()
     quote = quotes.fetch_quote(stock.ticker)
 
     history = snapshots.history(
@@ -248,8 +277,10 @@ def collect_all(
 ) -> CollectionReport:
     """Collect every target sequentially, one ticker at a time.
 
-    Sequential with a pause between upstream calls, never parallel — free-tier
-    rate limits are the binding constraint, not wall-clock time.
+    Sequential with a pause before every upstream call, never parallel — free-tier
+    rate limits are the binding constraint, not wall-clock time. Alpha Vantage in
+    particular rejects anything faster than one request per second, and it serves
+    both the quote and the fundamentals for a US stock.
 
     Provider failures are contained per ticker: one dead symbol must not cost the
     other nineteen. Two kinds are deliberately *not* contained, because both make
@@ -270,26 +301,23 @@ def collect_all(
         )
         for ticker in unregistered
     ]
-    called_provider = False
+    pace = Pacer(delay_seconds, sleep)
 
     for stock in targets:
         if skip_existing and snapshots.get(stock.ticker, as_of) is not None:
             results.append(TickerResult(ticker=stock.ticker, outcome=TickerOutcome.SKIPPED))
             continue
 
-        if called_provider:
-            sleep(delay_seconds)
-
         try:
             quotes = get_provider(quote_registry, stock.quote_provider)
-            called_provider = True
-            fundamentals = fetch_fundamentals(stock, fundamentals_registry)
+            fundamentals = fetch_fundamentals(stock, fundamentals_registry, pace)
             snapshot = collect_one(
                 stock,
                 quotes=quotes,
                 fundamentals=fundamentals,
                 snapshots=snapshots,
                 as_of=as_of,
+                pace=pace,
             )
         except AuthenticationError:
             # Listed first because it is a subclass of ProviderError and `except`

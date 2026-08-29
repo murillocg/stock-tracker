@@ -33,8 +33,8 @@ class Config:
     *tomorrow*. The snapshot date is the sort key of the whole time series, so
     that is not cosmetic.
     """
-    provider_delay_seconds: float = 1.0
-    """Pause between upstream calls. Collection is sequential to respect free-tier
+    provider_delay_seconds: float = 1.5
+    """Pause before every upstream call. Collection is sequential to respect free-tier
     rate limits — see CLAUDE.md, "no parallelism"."""
 
     @classmethod
@@ -58,5 +58,5 @@ class Config:
             alert_recipient=required("ALERT_RECIPIENT"),
             aws_region=source.get("AWS_REGION", "us-east-1"),
             market_timezone=source.get("MARKET_TIMEZONE", "America/Sao_Paulo"),
-            provider_delay_seconds=float(source.get("PROVIDER_DELAY_SECONDS", "1.0")),
+            provider_delay_seconds=float(source.get("PROVIDER_DELAY_SECONDS", "1.5")),
         )
