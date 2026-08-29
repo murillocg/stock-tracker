@@ -5,9 +5,9 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING, Any
 
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import ConditionBase, Key
 
-from shared.models import DailySnapshot, ListType, Stock
+from shared.models import DailySnapshot, ListType, Stock, Transaction
 
 if TYPE_CHECKING:
     # Imported for typing only. `boto3-stubs` is a dev dependency and is not in the
@@ -141,3 +141,62 @@ class DynamoDbSnapshotRepository:
         )
         items = response.get("Items", [])
         return None if not items else DailySnapshot.model_validate(items[0])
+
+
+class DynamoDbTransactionRepository:
+    """`Transactions` table. Conforms to `TransactionRepository` structurally."""
+
+    def __init__(self, table: Table) -> None:
+        self._table = table
+
+    def save(self, transaction: Transaction) -> None:
+        item = transaction.model_dump(by_alias=True, exclude_none=True)
+        # The sort key is derived rather than stored on the model, so it is added
+        # here — the only place that knows the table's key shape.
+        item["dateId"] = transaction.sort_key
+        self._table.put_item(Item=item)
+
+    def for_ticker(self, ticker: str) -> list[Transaction]:
+        return self._query(Key("ticker").eq(ticker.strip().upper()))
+
+    def all(self) -> list[Transaction]:
+        """The one scan in this codebase.
+
+        A ledger has no natural partition to query across, and the alternative —
+        a GSI keyed on a constant — would burn write units on every trade to save
+        a read of a few hundred rows a few times a day. Revisit if it ever grows
+        past a few thousand.
+        """
+        items: list[dict[str, Any]] = []
+        start_key: dict[str, Any] | None = None
+        while True:
+            if start_key is None:
+                response = self._table.scan()
+            else:
+                response = self._table.scan(ExclusiveStartKey=start_key)
+            items.extend(response.get("Items", []))
+            start_key = response.get("LastEvaluatedKey")
+            if not start_key:
+                break
+        return [Transaction.model_validate(item) for item in items]
+
+    def _query(self, condition: ConditionBase) -> list[Transaction]:
+        items: list[dict[str, Any]] = []
+        start_key: dict[str, Any] | None = None
+        while True:
+            if start_key is None:
+                response = self._table.query(KeyConditionExpression=condition)
+            else:
+                response = self._table.query(
+                    KeyConditionExpression=condition, ExclusiveStartKey=start_key
+                )
+            items.extend(response.get("Items", []))
+            start_key = response.get("LastEvaluatedKey")
+            if not start_key:
+                break
+        # The sort key orders them by date already; sorting again costs nothing
+        # and removes the caller's dependence on that being true.
+        return sorted(
+            (Transaction.model_validate(item) for item in items),
+            key=lambda t: (t.date, t.id),
+        )

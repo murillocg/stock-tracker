@@ -3,7 +3,7 @@
 import datetime as dt
 from typing import Protocol
 
-from shared.models import DailySnapshot, ListType, Stock
+from shared.models import DailySnapshot, ListType, Stock, Transaction
 
 
 class StockRepository(Protocol):
@@ -57,4 +57,30 @@ class SnapshotRepository(Protocol):
 
     def latest(self, ticker: str) -> DailySnapshot | None:
         """The most recent snapshot, or `None` if we have never collected it."""
+        ...
+
+
+class TransactionRepository(Protocol):
+    """The `Transactions` ledger. PK=`ticker`, SK=`<date>#<id>`.
+
+    Append-only in practice: `save` exists, nothing updates or deletes. A trade
+    that was entered wrongly is corrected by recording the correction, which is
+    what keeps the derived average price reproducible from the ledger alone.
+    """
+
+    def save(self, transaction: Transaction) -> None:
+        """Record one trade. Idempotent by (ticker, date, id)."""
+        ...
+
+    def for_ticker(self, ticker: str) -> list[Transaction]:
+        """Every trade in one ticker, oldest first. The input to `build_position`."""
+        ...
+
+    def all(self) -> list[Transaction]:
+        """Every trade across every ticker.
+
+        A scan, which is the one place this codebase does one. The alternative —
+        a GSI keyed on something constant — would cost write units on every trade
+        to avoid a table read of a few hundred rows a few times a day.
+        """
         ...

@@ -33,6 +33,8 @@ class FakeTable:
         self.query_calls: list[dict[str, Any]] = []
         self.get_item_response: dict[str, Any] = {}
         self.query_pages: list[dict[str, Any]] = []
+        self.scan_calls: list[dict[str, Any]] = []
+        self.scan_pages: list[dict[str, Any]] = []
 
     def put_item(self, **kwargs: Any) -> dict[str, Any]:
         self.put_items.append(kwargs["Item"])
@@ -41,6 +43,12 @@ class FakeTable:
     def get_item(self, **kwargs: Any) -> dict[str, Any]:
         self.get_item_calls.append(kwargs)
         return self.get_item_response
+
+    def scan(self, **kwargs: Any) -> dict[str, Any]:
+        self.scan_calls.append(kwargs)
+        if self.scan_pages:
+            return self.scan_pages.pop(0)
+        return {"Items": []}
 
     def query(self, **kwargs: Any) -> dict[str, Any]:
         self.query_calls.append(kwargs)

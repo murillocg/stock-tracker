@@ -2,7 +2,7 @@
 
 import datetime as dt
 
-from shared.models import DailySnapshot, ListType, Stock
+from shared.models import DailySnapshot, ListType, Stock, Transaction
 
 
 class InMemoryStockRepository:
@@ -63,3 +63,23 @@ class InMemorySnapshotRepository:
         if not by_date:
             return None
         return by_date[max(by_date)]
+
+
+class InMemoryTransactionRepository:
+    """Fake `TransactionRepository`, keyed like the real sort key."""
+
+    def __init__(self, transactions: list[Transaction] | None = None) -> None:
+        self._items: dict[str, dict[str, Transaction]] = {}
+        for transaction in transactions or []:
+            self.save(transaction)
+
+    def save(self, transaction: Transaction) -> None:
+        self._items.setdefault(transaction.ticker, {})[transaction.sort_key] = transaction
+
+    def for_ticker(self, ticker: str) -> list[Transaction]:
+        found = self._items.get(ticker.strip().upper(), {}).values()
+        return sorted(found, key=lambda t: (t.date, t.id))
+
+    def all(self) -> list[Transaction]:
+        every = [t for by_key in self._items.values() for t in by_key.values()]
+        return sorted(every, key=lambda t: (t.ticker, t.date, t.id))

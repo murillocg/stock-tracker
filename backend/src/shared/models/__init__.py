@@ -16,6 +16,7 @@ from shared.models.enums import (
 )
 from shared.models.snapshot import DailySnapshot, FetchedIndicators
 from shared.models.stock import Stock
+from shared.models.transaction import Transaction, TransactionType
 from shared.models.types import Ticker
 
 __all__ = [
@@ -31,4 +32,6 @@ __all__ = [
     "ProviderName",
     "Stock",
     "Ticker",
+    "Transaction",
+    "TransactionType",
 ]
