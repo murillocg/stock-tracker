@@ -34,6 +34,30 @@ TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 # the sector. The fundamentals modules are Pro-only; we get those from bolsai.
 PROFILE_MODULE = "summaryProfile"
 
+SECTOR_EN: dict[str, str] = {
+    "Serviços Financeiros": "Financial Services",
+    "Energia": "Energy",
+    "Materiais Básicos": "Basic Materials",
+    "Consumo Cíclico": "Consumer Cyclical",
+    "Consumo Não Cíclico": "Consumer Defensive",
+    "Construção e Imobiliário": "Real Estate",
+    "Emp. Adm. Part. - Energia Elétrica": "Utilities",
+    "Saúde": "Healthcare",
+    "Tecnologia": "Technology",
+    "Bens Industriais": "Industrials",
+    "Comunicações": "Communication Services",
+    "Utilidade Pública": "Utilities",
+}
+"""brapi's Portuguese sector -> the English name we store.
+
+CLAUDE.md: everything in English, including stored field values. brapi's taxonomy
+is Yahoo-derived, so these are Yahoo's own English labels rather than a literal
+translation — which keeps the vocabulary standard if a US provider is added later.
+
+Anything unmapped is stored as-is: a wrong-but-real value is easier to notice and
+fix than a silently dropped one.
+"""
+
 
 def fetch_metadata(client: httpx.Client, token: str, ticker: str) -> dict[str, str] | None:
     """Company name and sector from brapi, or `None` if the ticker is unknown.
@@ -54,9 +78,10 @@ def fetch_metadata(client: httpx.Client, token: str, ticker: str) -> dict[str, s
                 return None
             result: dict[str, Any] = results[0]
             profile = result.get(PROFILE_MODULE) or {}
+            sector = profile.get("sector") or ""
             return {
                 "name": result.get("longName") or result.get("shortName") or ticker,
-                "sector": profile.get("sector") or "",
+                "sector": SECTOR_EN.get(sector, sector),
             }
 
         # 404 means the ticker genuinely does not exist — retrying without the
