@@ -68,22 +68,36 @@ def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
 def slow_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Bought for the dividend, so the dividend has to be real and sustainable.
 
-    Both inputs are currently unavailable on any free plan, so this category
-    always reports INSUFFICIENT_DATA rather than guessing. Honest, and it keeps
-    the gap visible in the UI instead of hiding it.
+    Neither input is available on any free plan, so both fall back to the manual
+    figures on the stock. A provider value always wins when one exists: the point
+    of the manual fields is to fill a gap, not to override live data.
     """
+    yield_value = (
+        snapshot.dividend_yield
+        if snapshot.dividend_yield is not None
+        else stock.manual_dividend_yield
+    )
+    payout_value = (
+        snapshot.payout_ratio if snapshot.payout_ratio is not None else stock.manual_payout_ratio
+    )
+    provenance = (
+        f" Entered by hand on {stock.manual_updated_on.isoformat()}."
+        if stock.manual_updated_on is not None
+        else ""
+    )
+
     return [
         check(
             "Dividend yield",
-            snapshot.dividend_yield,
+            yield_value,
             DIVIDEND_YIELD_BAND,
-            "Yield on the current price.",
+            f"Yield on the current price.{provenance}",
         ),
         check(
             "Payout ratio",
-            snapshot.payout_ratio,
+            payout_value,
             PAYOUT_BAND,
-            "Share of earnings paid out. Above 80% is hard to sustain.",
+            f"Share of earnings paid out. Above 80% is hard to sustain.{provenance}",
         ),
     ]
 

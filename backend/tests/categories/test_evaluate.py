@@ -235,3 +235,64 @@ def test_leverage_still_counts_for_an_ordinary_company() -> None:
 def test_the_flag_defaults_to_applicable() -> None:
     """Most companies do have operating leverage; financials are the exception."""
     assert build_stock(LynchCategory.STALWART).uses_operating_leverage is True
+
+
+# --- manual dividend figures -------------------------------------------------
+
+
+def test_slow_grower_falls_back_to_the_manual_figures() -> None:
+    """No free API supplies these, so BBSE3's real numbers come from you."""
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_dividend_yield=Decimal("5.09"),
+        manual_payout_ratio=Decimal("96.19"),
+        manual_updated_on=dt.date(2026, 8, 29),
+    )
+
+    evaluation = evaluate(stock, build_snapshot())
+    signals = signals_by_name(evaluation)
+
+    assert signals["Dividend yield"] is Signal.GREEN
+    assert signals["Payout ratio"] is Signal.RED
+    assert evaluation.signal is Signal.RED
+
+
+def test_a_sustainable_payout_is_only_a_warning() -> None:
+    """CPLE3: 7.29% yield on a 73% payout — high, not yet reckless."""
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_dividend_yield=Decimal("7.29"),
+        manual_payout_ratio=Decimal("73.21"),
+    )
+
+    assert evaluate(stock, build_snapshot()).signal is Signal.YELLOW
+
+
+def test_a_provider_value_beats_the_manual_one() -> None:
+    """The manual fields fill a gap; they must not override live data."""
+    stock = build_stock(LynchCategory.SLOW_GROWER, manual_dividend_yield=Decimal("1"))
+    snapshot = build_snapshot(dividend_yield=Decimal("8"), payout_ratio=Decimal("40"))
+
+    signals = signals_by_name(evaluate(stock, snapshot))
+
+    assert signals["Dividend yield"] is Signal.GREEN
+
+
+def test_the_manual_date_is_surfaced_so_staleness_is_visible() -> None:
+    """Hand-maintained numbers go stale silently. Showing the date is the warning."""
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_dividend_yield=Decimal("5.09"),
+        manual_payout_ratio=Decimal("40"),
+        manual_updated_on=dt.date(2026, 8, 29),
+    )
+
+    check = evaluate(stock, build_snapshot()).checks[0]
+
+    assert "2026-08-29" in check.explanation
+
+
+def test_without_manual_figures_slow_grower_still_says_it_does_not_know() -> None:
+    evaluation = evaluate(build_stock(LynchCategory.SLOW_GROWER), build_snapshot())
+
+    assert evaluation.signal is Signal.INSUFFICIENT_DATA
