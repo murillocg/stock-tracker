@@ -351,3 +351,22 @@ def test_a_healthy_payout_is_still_green() -> None:
     )
 
     assert evaluate(stock, build_snapshot()).signal is Signal.GREEN
+
+
+def test_a_missing_pe_is_not_reported_as_a_loss() -> None:
+    """SPCX has no P/E because its provider supplies none. Telling the user the
+    company is loss-making on that basis asserts a fact we do not have."""
+    snapshot = build_snapshot(pb=Decimal("14.6"), roe=Decimal("0"))
+
+    evaluation = evaluate(build_stock(LynchCategory.FAST_GROWER), snapshot)
+
+    assert evaluation.signal is Signal.INSUFFICIENT_DATA
+    assert "do not know" in evaluation.checks[0].explanation
+
+
+def test_a_negative_pe_is_still_reported_as_a_loss() -> None:
+    """MRVE3 at -3.59 — a real loss, and a different answer from 'unknown'."""
+    evaluation = evaluate(build_stock(LynchCategory.STALWART), build_snapshot(pe=Decimal("-3.59")))
+
+    assert evaluation.signal is Signal.NEEDS_REVIEW
+    assert "loss-making" in evaluation.checks[0].explanation

@@ -16,10 +16,11 @@ from shared.categories.rules import (
     STALWART_PE_BAND,
     STALWART_ROE_BAND,
     Band,
+    Earnings,
     check,
+    earnings_status,
     leverage_check,
     payout_check,
-    profitable,
 )
 from shared.categories.signals import Check, Evaluation, Signal, worst
 from shared.indicators import peg
@@ -35,11 +36,32 @@ LOSS_MAKING = Check(
     ),
 )
 
+NO_EARNINGS_DATA = Check(
+    name="Earnings",
+    value=None,
+    signal=Signal.INSUFFICIENT_DATA,
+    explanation=(
+        "No P/E available from this stock's provider, so nothing earnings-based "
+        "can be judged. Not the same as a loss — we simply do not know."
+    ),
+)
+
+
+def _earnings_gate(snapshot: DailySnapshot) -> list[Check] | None:
+    """The check that replaces a ruleset when earnings cannot carry it."""
+    status = earnings_status(snapshot)
+    if status is Earnings.LOSS_MAKING:
+        return [LOSS_MAKING]
+    if status is Earnings.UNKNOWN:
+        return [NO_EARNINGS_DATA]
+    return None
+
 
 def fast_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """PEG below 1 is the whole thesis: growth you are not overpaying for."""
-    if not profitable(snapshot):
-        return [LOSS_MAKING]
+    gate = _earnings_gate(snapshot)
+    if gate is not None:
+        return gate
 
     ratio = peg(pe=snapshot.pe, earnings_growth=snapshot.earnings_cagr_5y)
     return [
@@ -55,8 +77,9 @@ def fast_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
 
 def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Steady compounder: a fair price, real returns, debt under control."""
-    if not profitable(snapshot):
-        return [LOSS_MAKING]
+    gate = _earnings_gate(snapshot)
+    if gate is not None:
+        return gate
 
     return [
         check("P/E", snapshot.pe, STALWART_PE_BAND, "Price against trailing earnings."),

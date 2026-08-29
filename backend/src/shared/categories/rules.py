@@ -6,6 +6,7 @@ named constants, so they are easy to find and argue with — which is the point.
 
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 
 from shared.categories.signals import Check, Signal
 from shared.models import DailySnapshot
@@ -132,14 +133,26 @@ def check(name: str, value: Decimal | None, band: Band, explanation: str) -> Che
     return Check(name=name, value=value, signal=signal, explanation=explanation)
 
 
-def profitable(snapshot: DailySnapshot) -> bool:
-    """Whether earnings-based ratios mean anything at all for this stock.
+class Earnings(StrEnum):
+    """Whether earnings-based ratios mean anything for this stock."""
 
-    A negative P/E is not a cheap stock, it is a loss-making one — MRVE3 in the
-    current portfolio reports -3.59. Every earnings multiple has to be gated on
-    this or the traffic light reads a loss as a bargain.
+    PROFITABLE = "PROFITABLE"
+    LOSS_MAKING = "LOSS_MAKING"
+    UNKNOWN = "UNKNOWN"
+
+
+def earnings_status(snapshot: DailySnapshot) -> Earnings:
+    """Classify the earnings picture before any multiple is trusted.
+
+    Three states, not two. A negative P/E is a loss-making company — MRVE3 reports
+    -3.59, and reading that as a cheap stock is the failure this guards against.
+    But a *missing* P/E is something else entirely: SPCX has none because Alpha
+    Vantage does not supply one, and telling the user "this company is loss-making"
+    on that basis would be asserting a fact we do not have.
     """
-    return snapshot.pe is not None and snapshot.pe > 0
+    if snapshot.pe is None:
+        return Earnings.UNKNOWN
+    return Earnings.PROFITABLE if snapshot.pe > 0 else Earnings.LOSS_MAKING
 
 
 def leverage_check(snapshot: DailySnapshot, *, applicable: bool = True) -> Check:
