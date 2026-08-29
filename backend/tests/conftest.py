@@ -61,6 +61,7 @@ def config() -> Config:
             "STOCKS_TABLE": "Stocks",
             "SNAPSHOTS_TABLE": "DailySnapshots",
             "BRAPI_TOKEN": "test-token",
+            "BOLSAI_API_KEY": "test-key",
             "ALERT_SENDER": "alerts@example.com",
             "ALERT_RECIPIENT": "me@example.com",
         }
@@ -75,7 +76,7 @@ def snapshot() -> DailySnapshot:
         price=Decimal("38.50"),
         pe=Decimal("4.5"),
         net_debt_to_ebitda=Decimal("1.2"),
-        quarter="2026Q2",
+        reference_date=dt.date(2026, 6, 30),
         change_1m=Decimal("-3.25"),
     )
 

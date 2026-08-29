@@ -11,6 +11,7 @@ from shared.models import ProviderName
 from shared.providers import (
     AuthenticationError,
     BrapiProvider,
+    FeatureUnavailableError,
     MalformedResponseError,
     ProviderUnavailableError,
     QuoteProvider,
@@ -23,10 +24,15 @@ QUOTE_PAYLOAD: dict[str, Any] = {
             "symbol": "PETR4",
             "regularMarketPrice": 38.5,
             "priceEarnings": 0.1,
-            "priceToBook": 1.25,
+            "earningsPerShare": 385.0,
+            "marketCap": 578883123320,
         }
     ]
 }
+"""The shape of a real free-plan response: no fundamentals anywhere.
+
+`priceEarnings` is 0.1 here purely to exercise float-to-Decimal precision below.
+"""
 
 
 def build_provider(handler: Callable[[httpx.Request], httpx.Response]) -> BrapiProvider:
@@ -64,7 +70,7 @@ def test_it_maps_the_payload_onto_a_quote() -> None:
 
     assert quote.ticker == "PETR4"
     assert quote.price == Decimal("38.5")
-    assert quote.pb == Decimal("1.25")
+    assert quote.pe == Decimal("0.1")
 
 
 def test_json_floats_become_exact_decimals() -> None:
@@ -78,11 +84,19 @@ def test_json_floats_become_exact_decimals() -> None:
     assert quote.pe != Decimal(0.1)  # noqa: RUF032
 
 
-def test_indicators_the_free_tier_omits_are_none() -> None:
+def test_the_free_plan_carries_no_fundamentals_at_all() -> None:
+    """Verified against the live API: these live in Pro-only modules, not here.
+
+    They come from `BolsaiProvider` instead, which is why `QUOTE_FIELD_MAP` no
+    longer pretends to look for them.
+    """
     quote = build_provider(ok(QUOTE_PAYLOAD)).fetch_quote("PETR4")
 
+    assert quote.pb is None
     assert quote.ev_ebitda is None
     assert quote.roe is None
+    assert quote.net_debt_to_ebitda is None
+    assert quote.dividend_yield is None
 
 
 def test_the_token_is_sent_as_a_query_parameter() -> None:
@@ -98,15 +112,20 @@ def test_the_token_is_sent_as_a_query_parameter() -> None:
     assert seen[0].path == "/api/quote/PETR4"
 
 
-@pytest.mark.parametrize("code", [httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN])
-def test_rejected_credentials_are_their_own_error(code: int) -> None:
+def test_rejected_credentials_are_their_own_error() -> None:
     """brapi answers 401 MISSING_TOKEN for every non-demo ticker without a token.
 
     It must not be reported as a malformed response: the fix is a new token, not
     a mapping bug, and the run should stop rather than retry 19 more times.
     """
     with pytest.raises(AuthenticationError):
-        build_provider(status(code)).fetch_quote("WEGE3")
+        build_provider(status(httpx.codes.UNAUTHORIZED)).fetch_quote("WEGE3")
+
+
+def test_a_gated_feature_is_not_a_credentials_problem() -> None:
+    """brapi answers 403 MODULES_NOT_AVAILABLE while the token is valid."""
+    with pytest.raises(FeatureUnavailableError):
+        build_provider(status(httpx.codes.FORBIDDEN)).fetch_quote("WEGE3")
 
 
 def test_a_401_is_not_treated_as_retryable() -> None:

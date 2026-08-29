@@ -34,7 +34,7 @@ MODULE_CANDIDATES: dict[str, tuple[str, str]] = {
     "pb": ("defaultKeyStatistics", "priceToBook"),
     "ev_ebitda": ("defaultKeyStatistics", "enterpriseToEbitda"),
     "dividend_yield": ("defaultKeyStatistics", "dividendYield"),
-    "quarter": ("defaultKeyStatistics", "mostRecentQuarter"),
+    "reference_date": ("defaultKeyStatistics", "mostRecentQuarter"),
     "roe": ("financialData", "returnOnEquity"),
     "gross_margin": ("financialData", "grossMargins"),
     "ebitda_margin": ("financialData", "ebitdaMargins"),

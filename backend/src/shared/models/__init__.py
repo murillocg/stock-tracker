@@ -16,7 +16,7 @@ from shared.models.enums import (
 )
 from shared.models.snapshot import DailySnapshot, FetchedIndicators
 from shared.models.stock import Stock
-from shared.models.types import Quarter, Ticker
+from shared.models.types import Ticker
 
 __all__ = [
     "AlertRule",
@@ -29,7 +29,6 @@ __all__ = [
     "LynchCategory",
     "Market",
     "ProviderName",
-    "Quarter",
     "Stock",
     "Ticker",
 ]

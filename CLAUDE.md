@@ -100,10 +100,22 @@ so the portfolio lists in a single query).
 
 **Table `DailySnapshots`** (time series): PK=`ticker`, SK=`date` (ISO 8601).
 Indicators: price, pe, pb, evEbitda, roe, netDebtToEbitda, dividendYield (these come
-from the API — FETCH); roic, payoutRatio, peg, revenueGrowth, earningsGrowth
-(computed — COMPUTE); grossMargin, ebitdaMargin; quarter (e.g. "2026Q2");
-change1w/1m/6m/1y (computed from our own history). FX enters as a special ticker
-`USDBRL`.
+from the API — FETCH); roic, payoutRatio, peg, revenueCagr5y, earningsCagr5y
+(computed — COMPUTE); grossMargin, ebitdaMargin; referenceDate (statement date,
+e.g. "2026-06-30"); change1w/1m/6m/1y (computed from our own history). FX enters as
+a special ticker `USDBRL`.
+
+Two naming decisions, both settled against live API data:
+- **`referenceDate`, not `quarter`** — a `2026Q2` label is lossy and wrong for US
+  tickers whose fiscal year is not the calendar year (Apple's fiscal Q2 ends in
+  March). The date is the fact; the label is presentation, derived at render time.
+- **`revenueCagr5y` / `earningsCagr5y`, not `revenueGrowth` / `earningsGrowth`** —
+  bolsai supplies 5-year CAGR, not year-over-year, and PEG means different things
+  depending on which one feeds it. The field name says which.
+
+`dividendYield` and `payoutRatio` have **no free data source** (brapi gates them
+behind Pro at R$139,99/mo; bolsai's `/dividends` endpoint is Pro-only). They stay
+empty, which makes SLOW_GROWER the one category we cannot fully judge yet.
 
 Billing: `PAY_PER_REQUEST` (on-demand, no fixed cost).
 

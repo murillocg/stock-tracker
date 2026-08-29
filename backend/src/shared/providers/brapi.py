@@ -1,6 +1,5 @@
 """brapi.dev — B3 quotes. The provider for the Phase 0 vertical slice."""
 
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
@@ -8,10 +7,12 @@ import httpx
 from shared.models import ProviderName
 from shared.providers.errors import (
     AuthenticationError,
+    FeatureUnavailableError,
     MalformedResponseError,
     ProviderUnavailableError,
     TickerNotFoundError,
 )
+from shared.providers.parsing import to_decimal
 from shared.providers.quote import ProviderQuote
 
 DEFAULT_BASE_URL = "https://brapi.dev/api"
@@ -20,35 +21,18 @@ PRICE_KEY = "regularMarketPrice"
 
 QUOTE_FIELD_MAP: dict[str, str] = {
     "pe": "priceEarnings",
-    "pb": "priceToBook",
-    "ev_ebitda": "enterpriseValueToEbitda",
-    "roe": "returnOnEquity",
-    "net_debt_to_ebitda": "netDebtToEbitda",
-    "dividend_yield": "dividendYield",
 }
 """`ProviderQuote` field -> brapi response key.
 
-Kept as data rather than buried in `_map` so `scripts/smoke_brapi.py` can report,
-against a live response, exactly which of these the free tier actually returns.
+Deliberately short. Verified against the live API: brapi's free plan returns the
+price, `priceEarnings`, `earningsPerShare` and `marketCap`, and nothing else we
+model. P/B, EV/EBITDA, ROE, Net Debt/EBITDA and dividend yield are not top-level
+keys on *any* plan — they live inside the `defaultKeyStatistics` and
+`financialData` modules, which cost R$139,99/mo. Mapping them here would be five
+lookups that can only ever return `None`.
+
+Everything fundamental comes from bolsai instead; see `bolsai.py`.
 """
-
-
-def _to_decimal(value: Any) -> Decimal | None:
-    """Coerce one JSON number to `Decimal`, or `None` if it is unusable.
-
-    JSON numbers arrive as `float`, which cannot represent 0.1 exactly. Going
-    through `str` first is what stops 4.5 from becoming 4.4999999999999996 — the
-    same reason you would never hold money in a Java `double`.
-
-    A field we cannot parse becomes `None` rather than an exception: one bad
-    indicator must not cost us the whole quote.
-    """
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return None
 
 
 class BrapiProvider:
@@ -57,9 +41,9 @@ class BrapiProvider:
     Conforms to `QuoteProvider` structurally — note there is no base class and no
     import of the Protocol.
 
-    The free tier reliably returns the price and a small number of ratios. The
-    fuller indicator set (EV/EBITDA, Net Debt/EBITDA) comes from bolsai; anything
-    neither supplies is derived in the COMPUTE step.
+    Price and P/E only: that is the whole of brapi's free plan for our purposes.
+    It is the *daily* half of collection. The fundamentals, which move only when
+    earnings are released, come from `BolsaiProvider`.
     """
 
     def __init__(
@@ -94,10 +78,10 @@ class BrapiProvider:
         # Checked before the generic fallback below: brapi answers 401
         # `MISSING_TOKEN` for every non-demo ticker when the token is absent or
         # revoked, and calling that "malformed" would send us hunting the wrong bug.
-        if response.status_code in (httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN):
-            raise AuthenticationError(
-                f"brapi rejected our credentials (HTTP {response.status_code}) for {symbol}"
-            )
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            raise AuthenticationError(f"brapi rejected our credentials for {symbol}")
+        if response.status_code == httpx.codes.FORBIDDEN:
+            raise FeatureUnavailableError(f"brapi plan does not cover this request for {symbol}")
         if response.status_code == httpx.codes.NOT_FOUND:
             raise TickerNotFoundError(f"brapi does not know ticker {symbol}")
         if response.status_code >= httpx.codes.INTERNAL_SERVER_ERROR:
@@ -127,14 +111,14 @@ class BrapiProvider:
         if not isinstance(result, dict):
             raise MalformedResponseError(f"brapi result for {symbol} is not an object")
 
-        price = _to_decimal(result.get(PRICE_KEY))
+        price = to_decimal(result.get(PRICE_KEY))
         if price is None or price <= 0:
             raise MalformedResponseError(f"brapi returned no usable price for {symbol}")
 
-        indicators = {field: _to_decimal(result.get(key)) for field, key in QUOTE_FIELD_MAP.items()}
+        indicators = {field: to_decimal(result.get(key)) for field, key in QUOTE_FIELD_MAP.items()}
         # `model_validate` rather than the constructor: we are parsing a dict built
         # from a mapping table, and mypy cannot prove a `dict[str, Decimal | None]`
-        # fits every keyword argument (`quarter` is a `str`). Validation still runs.
+        # fits every keyword argument (`reference_date` is a date). Validation runs.
         return ProviderQuote.model_validate(
             {"ticker": result.get("symbol") or symbol, "price": price, **indicators}
         )

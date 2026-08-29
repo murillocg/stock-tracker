@@ -27,7 +27,7 @@ from shared.providers import (
     TickerNotFoundError,
     get_provider,
 )
-from shared.providers.factory import build_registry
+from shared.providers.factory import build_quote_registry
 from shared.repository import (
     DynamoDbSnapshotRepository,
     DynamoDbStockRepository,
@@ -235,7 +235,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         report = collect_all(
             stocks=stocks,
             snapshots=snapshots,
-            registry=build_registry(client, config),
+            registry=build_quote_registry(client, config),
             as_of=as_of,
             delay_seconds=config.provider_delay_seconds,
             tickers=tickers,

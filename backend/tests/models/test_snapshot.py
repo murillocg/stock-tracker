@@ -67,14 +67,41 @@ def test_round_trip_through_the_item_shape(snapshot: DailySnapshot) -> None:
     assert DailySnapshot.model_validate(item) == snapshot
 
 
-@pytest.mark.parametrize("quarter", ["2026Q5", "26Q2", "2026-Q2", "Q2"])
-def test_malformed_quarters_are_rejected(quarter: str) -> None:
+def test_the_reference_date_is_stored_as_a_date_not_a_quarter_label() -> None:
+    """The statement date is the fact; `2026Q2` is presentation, derived later.
+
+    A calendar-quarter label would be wrong for US tickers whose fiscal year does
+    not match the calendar, and the mistake would be unrecoverable once written.
+    """
+    snapshot = DailySnapshot(
+        ticker="PETR4",
+        date=dt.date(2026, 8, 28),
+        price=Decimal(1),
+        reference_date=dt.date(2026, 6, 30),
+    )
+
+    item = snapshot.model_dump(by_alias=True, exclude_none=True)
+
+    assert snapshot.reference_date == dt.date(2026, 6, 30)
+    assert item["referenceDate"] == "2026-06-30"
+
+
+def test_the_reference_date_is_optional() -> None:
+    """Price collection runs daily; fundamentals only land when earnings do."""
+    snapshot = DailySnapshot(ticker="PETR4", date=dt.date(2026, 8, 28), price=Decimal(1))
+
+    assert snapshot.reference_date is None
+    assert "referenceDate" not in snapshot.model_dump(by_alias=True, exclude_none=True)
+
+
+@pytest.mark.parametrize("bad_date", ["2026-13-01", "not-a-date", "2026-06-31"])
+def test_a_malformed_reference_date_is_rejected(bad_date: str) -> None:
     with pytest.raises(ValidationError):
         DailySnapshot(
             ticker="PETR4",
             date=dt.date(2026, 8, 28),
             price=Decimal(1),
-            quarter=quarter,
+            reference_date=bad_date,  # type: ignore[arg-type]
         )
 
 

@@ -18,11 +18,21 @@ class ProviderUnavailableError(ProviderError):
 
 
 class AuthenticationError(ProviderError):
-    """The provider rejected our credentials (401/403).
+    """The provider rejected our credentials (401).
 
     Run-level, not ticker-level. Every other ticker will fail identically with
     the same token, so the collector aborts rather than spending twenty calls and
     twenty delays to learn the same thing twenty times.
+    """
+
+
+class FeatureUnavailableError(ProviderError):
+    """Our plan does not include what we asked for (403).
+
+    Distinct from `AuthenticationError` on the evidence: both free tiers answer
+    403 for paid features while the credentials are perfectly valid — brapi with
+    `MODULES_NOT_AVAILABLE`, bolsai with `Pro tier required`. Aborting the run
+    over one gated endpoint would be wrong, so this is recorded and skipped.
     """
 
 

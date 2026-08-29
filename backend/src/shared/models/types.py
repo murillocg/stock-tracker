@@ -19,6 +19,3 @@ Ticker = Annotated[
 It is the partition key of both tables, so normalising here — at the boundary —
 is what stops `PETR4` and `petr4` from becoming two different rows.
 """
-
-Quarter = Annotated[str, Field(pattern=r"^\d{4}Q[1-4]$")]
-"""Fiscal quarter the fundamentals refer to, e.g. `2026Q2`."""

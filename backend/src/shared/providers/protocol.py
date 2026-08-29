@@ -3,6 +3,7 @@
 from typing import Protocol, runtime_checkable
 
 from shared.models import ProviderName
+from shared.providers.fundamentals import ProviderFundamentals
 from shared.providers.quote import ProviderQuote
 
 
@@ -32,6 +33,36 @@ class QuoteProvider(Protocol):
         Raises:
             TickerNotFoundError: the ticker is unknown upstream; skip it.
             ProviderUnavailableError: transport failure, 5xx or rate limit.
+            AuthenticationError: credentials rejected; abort the run.
+            FeatureUnavailableError: our plan does not cover this; skip it.
             MalformedResponseError: 200 with a body we cannot map.
+        """
+        ...
+
+
+@runtime_checkable
+class FundamentalsProvider(Protocol):
+    """Structural contract for statement-derived indicators.
+
+    A second, narrow Protocol rather than more methods on `QuoteProvider`. The
+    two capabilities have different cadences and different providers serve them:
+    brapi has prices and no fundamentals, bolsai has fundamentals and no daily
+    price. One fat interface would leave every implementation raising
+    `NotImplementedError` for half its methods — the interface-segregation
+    argument, and the reason CLAUDE.md asks for composition over inheritance.
+
+    A provider that happened to do both would satisfy both Protocols at once,
+    with no changes to either — structural typing needs no `implements` list.
+    """
+
+    @property
+    def name(self) -> ProviderName:
+        """Which `ProviderName` this implementation serves."""
+        ...
+
+    def fetch_fundamentals(self, ticker: str) -> ProviderFundamentals:
+        """Fetch the latest statement-derived indicators for one ticker.
+
+        Raises the same errors as `QuoteProvider.fetch_quote`.
         """
         ...
