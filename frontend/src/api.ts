@@ -60,6 +60,33 @@ export interface Snapshot {
   change1y: string | null
 }
 
+export interface Position {
+  ticker: string
+  currency: string
+  quantity: string
+  averagePrice: string | null
+  invested: string
+  realisedGain: string
+}
+
+export interface Valuation {
+  marketValue: string
+  unrealisedGain: string
+  unrealisedGainPercent: string
+  /** Share of the portfolio. Null when it cannot be priced in the base currency. */
+  weight: string | null
+}
+
+export interface PortfolioTotals {
+  invested: string
+  marketValue: string
+  unrealisedGain: string
+  unrealisedGainPercent: string
+  currency: string
+  priced: number
+  unpriced: number
+}
+
 export interface StockView {
   ticker: string
   name: string
@@ -70,6 +97,8 @@ export interface StockView {
   listType: 'PORTFOLIO' | 'WATCHLIST'
   current: Snapshot | null
   evaluation: Evaluation
+  position: Position | null
+  valuation: Valuation | null
 }
 
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
@@ -87,11 +116,23 @@ async function get<T>(path: string): Promise<T> {
 
 export function listStocks(listType?: 'PORTFOLIO' | 'WATCHLIST') {
   const query = listType ? `?listType=${listType}` : ''
-  return get<{ stocks: StockView[] }>(`/stocks${query}`)
+  return get<{ stocks: StockView[]; totals: PortfolioTotals | null }>(`/stocks${query}`)
 }
 
 export function getStock(ticker: string, days = 90) {
   return get<{ stock: StockView; history: Snapshot[] }>(`/stocks/${ticker}?days=${days}`)
+}
+
+/** Format a Decimal-as-string for display, without ever parsing it to a float. */
+export function brl(value: string): string {
+  const [whole = '0', fraction = '00'] = value.split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${grouped},${fraction.slice(0, 2)}`
+}
+
+/** Sign of a Decimal string, judged textually — no float conversion involved. */
+export function isNegative(value: string): boolean {
+  return value.trimStart().startsWith('-')
 }
 
 /** Rank for sorting: the things needing attention first, the fine ones last. */

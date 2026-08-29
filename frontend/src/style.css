@@ -139,3 +139,37 @@ table.history tbody tr:last-child td { border-bottom: none; }
 }
 .reasons li .dot { position: relative; top: .35rem; }
 .reasons li strong { color: var(--text); font-weight: 600; }
+
+/* Weight: the number the monthly contribution decision turns on, so it gets its
+   own column rather than being folded into the figures below. */
+.weight {
+  flex: none; min-width: 4.2rem; text-align: right;
+  font-variant-numeric: tabular-nums; font-size: .95rem; font-weight: 600;
+  color: #35507a;
+}
+.weight small { font-weight: 400; font-size: .72rem; color: var(--muted); margin-left: .05rem; }
+.weight.is-empty { color: var(--unknown); font-weight: 400; }
+
+.figures { display: flex; flex-wrap: wrap; gap: 1.1rem; margin-top: .6rem; font-size: .82rem; }
+.fig { display: inline-flex; align-items: baseline; gap: .3rem; }
+.fig .k { color: var(--muted); font-size: .78rem; }
+.fig b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.fig.up b { color: var(--green); }
+.fig.down b { color: var(--red); }
+.fig.up .k { color: var(--green); opacity: .8; }
+.fig.down .k { color: var(--red); opacity: .8; }
+
+.summary {
+  display: flex; flex-wrap: wrap; gap: 1.6rem;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: .9rem 1.1rem; margin-bottom: 1.1rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+.sum { display: flex; flex-direction: column; gap: .1rem; }
+.sum .k { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+.sum b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.sum small { font-weight: 400; font-size: .78rem; color: var(--muted); margin-left: .25rem; }
+.sum.up b { color: var(--green); }
+.sum.down b { color: var(--red); }
+
+.tabs .spacer { flex: 1; }

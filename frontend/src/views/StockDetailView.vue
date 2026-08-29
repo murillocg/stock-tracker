@@ -2,6 +2,7 @@
 import { ref, watchEffect } from 'vue'
 import { getStock, type Snapshot, type StockView } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
+import HoldingFigures from '@/components/HoldingFigures.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
 import SignalDot from '@/components/SignalDot.vue'
 
@@ -58,6 +59,11 @@ const CHANGES = [
             {{ stock.current.price }}
           </span>
         </div>
+        <HoldingFigures
+          :position="stock.position"
+          :valuation="stock.valuation"
+          :currency="stock.currency"
+        />
         <CheckChips :checks="stock.evaluation.checks" />
         <p v-if="stock.current?.referenceDate" class="subtle" style="margin: .8rem 0 0">
           Fundamentals as of {{ stock.current.referenceDate }} — price-based ratios
