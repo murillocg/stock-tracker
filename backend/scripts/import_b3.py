@@ -40,12 +40,13 @@ ADJUSTMENTS: list[dict[str, Any]] = [
     # the holdings the broker reports.
     {
         "ticker": "BBAS3",
-        "date": dt.date(2024, 4, 1),
+        "date": dt.date(2024, 4, 15),
         "type": TransactionType.BONUS,
         "quantity": "200",
         "broker": "NU INVEST",
-        "note": "2:1 split. The price went 56.08 (26/03/2024) -> 27.62 (06/06/2024) with "
-        "no trades in between, and doubling the 200 held then reproduces 600.",
+        "note": "Desdobramento 1:1 — each share became two. Approved at the AGE of 02/02/2024, "
+        "authorised by the Banco Central on 05/04/2024, data-base 15/04/2024. Doubling the 200 "
+        "held on that date reproduces the 600 you hold.",
     },
     {
         "ticker": "ITSA4",
