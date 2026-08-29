@@ -1,18 +1,21 @@
 :root {
-  --bg: #0f1115;
-  --panel: #171a21;
-  --border: #262b36;
-  --text: #e6e9ef;
-  --muted: #8b93a7;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e2e5ea;
+  --border-strong: #cfd4dc;
+  --text: #1b1f27;
+  --muted: #656d7b;
 
-  --green: #3fb950;
-  --yellow: #d29922;
-  --red: #f85149;
-  --review: #a371f7;
-  --unknown: #6e7681;
+  /* Darkened from the usual bright signal colours: on white, a mid-tone green
+     or amber fails contrast badly. These sit around 4.5:1 against the panel. */
+  --green: #1a7f37;
+  --yellow: #9a6700;
+  --red: #cf222e;
+  --review: #7d4ed8;
+  --unknown: #8c95a1;
 
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -21,6 +24,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -35,13 +39,21 @@ header.page-head h1 { font-size: 1.4rem; margin: 0; letter-spacing: -0.01em; }
 .tabs button {
   background: var(--panel); color: var(--muted); border: 1px solid var(--border);
   border-radius: 999px; padding: .35rem .9rem; font-size: .85rem; cursor: pointer;
+  transition: border-color .12s ease, color .12s ease;
 }
-.tabs button[aria-pressed="true"] { color: var(--text); border-color: var(--muted); }
+.tabs button:hover { border-color: var(--border-strong); }
+.tabs button[aria-pressed="true"] {
+  color: var(--text); border-color: var(--border-strong); background: #eef0f4;
+}
 
 .card {
   background: var(--panel); border: 1px solid var(--border);
   border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: .6rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  transition: border-color .12s ease, box-shadow .12s ease;
 }
+a .card:hover { border-color: var(--border-strong); box-shadow: 0 2px 6px rgba(16, 24, 40, .07); }
+
 .card-head { display: flex; align-items: center; gap: .75rem; }
 .ticker { font-weight: 600; font-size: 1rem; }
 .name { color: var(--muted); font-size: .85rem; flex: 1; min-width: 0;
@@ -51,11 +63,11 @@ header.page-head h1 { font-size: 1.4rem; margin: 0; letter-spacing: -0.01em; }
 .checks { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
 .chip {
   display: inline-flex; align-items: center; gap: .4rem;
-  border: 1px solid var(--border); border-radius: 7px;
+  border: 1px solid var(--border); border-radius: 7px; background: #fafbfc;
   padding: .3rem .55rem; font-size: .8rem; color: var(--muted);
 }
-.chip strong { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; }
-.chip.is-muted { opacity: .55; }
+.chip strong { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.chip.is-muted { opacity: .6; }
 
 .dot { width: .55rem; height: .55rem; border-radius: 50%; flex: none; }
 .dot.GREEN { background: var(--green); }
@@ -68,7 +80,8 @@ header.page-head h1 { font-size: 1.4rem; margin: 0; letter-spacing: -0.01em; }
 .badge {
   display: inline-flex; align-items: center; gap: .45rem;
   font-size: .78rem; padding: .25rem .6rem; border-radius: 999px;
-  border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+  border: 1px solid var(--border); background: #fafbfc;
+  color: var(--muted); white-space: nowrap;
 }
 .tag { font-size: .72rem; color: var(--muted); text-transform: uppercase;
        letter-spacing: .06em; }
@@ -78,8 +91,9 @@ header.page-head h1 { font-size: 1.4rem; margin: 0; letter-spacing: -0.01em; }
 
 table.history { width: 100%; border-collapse: collapse; font-size: .85rem; }
 table.history th, table.history td {
-  text-align: right; padding: .4rem .5rem; border-bottom: 1px solid var(--border);
+  text-align: right; padding: .45rem .5rem; border-bottom: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
 }
 table.history th:first-child, table.history td:first-child { text-align: left; }
 table.history th { color: var(--muted); font-weight: 500; }
+table.history tbody tr:last-child td { border-bottom: none; }
