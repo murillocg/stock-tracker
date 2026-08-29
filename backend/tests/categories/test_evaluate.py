@@ -296,3 +296,31 @@ def test_without_manual_figures_slow_grower_still_says_it_does_not_know() -> Non
     evaluation = evaluate(build_stock(LynchCategory.SLOW_GROWER), build_snapshot())
 
     assert evaluation.signal is Signal.INSUFFICIENT_DATA
+
+
+def test_a_zero_payout_fails_the_slow_grower_thesis() -> None:
+    """AXIA3 reports 0. The monotonic band would have scored that GREEN.
+
+    "Maximally sustainable" is technically true and useless: a stock held for
+    income that pays none belongs in a different category.
+    """
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_payout_ratio=Decimal("0"),
+        manual_dividend_yield=Decimal("0"),
+    )
+
+    signals = signals_by_name(evaluate(stock, build_snapshot()))
+
+    assert signals["Payout ratio"] is Signal.RED
+    assert signals["Dividend yield"] is Signal.RED
+
+
+def test_a_healthy_payout_is_still_green() -> None:
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_payout_ratio=Decimal("45"),
+        manual_dividend_yield=Decimal("6"),
+    )
+
+    assert evaluate(stock, build_snapshot()).signal is Signal.GREEN

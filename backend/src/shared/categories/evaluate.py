@@ -12,13 +12,13 @@ from shared.categories.rules import (
     CYCLICAL_PB_BAND,
     DIVIDEND_YIELD_BAND,
     GROWTH_BAND,
-    PAYOUT_BAND,
     PEG_BAND,
     STALWART_PE_BAND,
     STALWART_ROE_BAND,
     Band,
     check,
     leverage_check,
+    payout_check,
     profitable,
 )
 from shared.categories.signals import Check, Evaluation, Signal, worst
@@ -93,12 +93,7 @@ def slow_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             DIVIDEND_YIELD_BAND,
             f"Yield on the current price.{provenance}",
         ),
-        check(
-            "Payout ratio",
-            payout_value,
-            PAYOUT_BAND,
-            f"Share of earnings paid out. Above 80% is hard to sustain.{provenance}",
-        ),
+        payout_check(payout_value),
     ]
 
 

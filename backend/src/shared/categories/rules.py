@@ -37,6 +37,41 @@ LEVERAGE_BAND = Band(green=Decimal("2"), yellow=Decimal("3"))
 DIVIDEND_YIELD_BAND = Band(green=Decimal("5"), yellow=Decimal("3"), lower_is_better=False)
 PAYOUT_BAND = Band(green=Decimal("60"), yellow=Decimal("80"))
 
+PAYOUT_FLOOR = Decimal("20")
+"""Below this, a SLOW_GROWER is not one.
+
+The band above is monotonic — lower payout, safer dividend — which is right at
+the top end and wrong at the bottom. A company paying out 0% scores "maximally
+sustainable" on that logic, when what it actually means is that the income thesis
+does not hold and the stock belongs in another category. AXIA3 reports 0.
+"""
+
+
+def payout_check(value: Decimal | None) -> Check:
+    """Payout ratio, judged from both ends.
+
+    Too high and the dividend is borrowed from the future; too low and there is
+    no dividend to be here for. Only the high end is a matter of degree, so the
+    floor is a flat RED rather than another band.
+    """
+    if value is not None and value < PAYOUT_FLOOR:
+        return Check(
+            name="Payout ratio",
+            value=value,
+            signal=Signal.RED,
+            explanation=(
+                f"Only {value}% of earnings paid out. A SLOW_GROWER is held for "
+                "its income; at this level the category is the wrong one."
+            ),
+        )
+    return check(
+        "Payout ratio",
+        value,
+        PAYOUT_BAND,
+        "Share of earnings paid out. Above 80% is hard to sustain.",
+    )
+
+
 # --- ASSET_PLAY: Lynch buys the assets below book -----------------------------
 ASSET_PLAY_PB_BAND = Band(green=Decimal("1"), yellow=Decimal("1.5"))
 
