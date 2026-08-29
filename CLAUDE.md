@@ -20,10 +20,15 @@ make. Personal use, a single user.
 
 ## Stack (decided — do not reopen unless I ask)
 
-- **Language:** Python (collector + API). Frontend in Angular (TypeScript).
+- **Language:** Python (collector + API). Frontend in **Vue 3 (TypeScript)**.
+  - Angular was the original choice and was reconsidered on 2026-08-29. The app is
+    four read-only screens for one user; Angular's ceremony is not repaid at that
+    size, and learning it alongside Python and serverless is a third curve at once.
+    Vue ships fastest with official router/store and a gentle learning curve.
+    Use `<script setup>` + Composition API, Vite, Pinia only if state demands it.
 - **Cloud:** all AWS, serverless, free tier, nothing running 24/7.
   - Collection: **Lambda** triggered by **EventBridge Scheduler** (1x/day, end of day).
-  - Read API: **Lambda + API Gateway** (serves the Angular app).
+  - Read API: **Lambda + API Gateway** (serves the Vue app).
   - Database: **DynamoDB** (always-free tier).
   - Frontend hosting: **S3 + CloudFront**.
   - Alert email: **SES**.
@@ -84,9 +89,9 @@ stock-tracker/
 │  │  │  ├─ repository/   # Protocol + DynamoDB impl (boto3) + in-memory fake for tests
 │  │  │  └─ config.py
 │  │  ├─ collector/  # LAMBDA 1: handler.py — fetch -> compute -> store -> alert
-│  │  └─ api/        # LAMBDA 2: handler.py — read endpoints for Angular
+│  │  └─ api/        # LAMBDA 2: handler.py — read endpoints for the Vue app
 │  └─ tests/
-├─ frontend/         # Angular
+├─ frontend/         # Vue 3 + Vite (TypeScript)
 └─ .github/workflows/
 ```
 
