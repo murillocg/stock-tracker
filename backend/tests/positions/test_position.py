@@ -177,3 +177,19 @@ def test_a_fractional_quantity_keeps_its_digits() -> None:
 
     assert position is not None
     assert str(position.quantity) == "1.25"
+
+
+def test_the_same_ticker_at_two_brokers_is_one_position() -> None:
+    """PRIO3 is held at BTG and Nu Invest. Brazilian IRPF averages cost per
+    security across custodians, so splitting it would produce two averages that
+    the tax treatment does not recognise."""
+    btg = trade(1, BUY, "300", "24.00")
+    nu = trade(5, BUY, "300", "26.00")
+    position = build_position(
+        "PRIO3",
+        [btg.model_copy(update={"broker": "BTG"}), nu.model_copy(update={"broker": "NU INVEST"})],
+    )
+
+    assert position is not None
+    assert position.quantity == Decimal("600")
+    assert position.average_price == Decimal("25.00")

@@ -49,6 +49,16 @@ class Transaction(CamelModel):
     unit_price: Decimal = Field(gt=0)
     currency: Currency
 
+    broker: str | None = None
+    """Which custodian executed it, from B3's `Instituição` column.
+
+    Recorded but never used to split a position. Brazilian IRPF computes average
+    cost per *security* aggregated across custodians — holding PRIO3 at two
+    brokers is one position with one average, not two. Keeping the broker on each
+    row means a per-broker breakdown is always derivable without making it the
+    unit of accounting.
+    """
+
     fees: Decimal | None = None
     """Brokerage and exchange fees. Unused today, and deliberately present:
     Brazilian cost basis includes them, so Phase 4 will need it and adding the
