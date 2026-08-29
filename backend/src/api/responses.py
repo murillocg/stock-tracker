@@ -1,5 +1,6 @@
 """What the read API returns. Pydantic at the boundary, as everywhere else."""
 
+from decimal import Decimal
 from typing import Any
 
 from shared.categories import Evaluation
@@ -13,6 +14,7 @@ from shared.models import (
     Stock,
 )
 from shared.models.types import Ticker
+from shared.positions import Position, Valuation
 
 
 class StockView(CamelModel):
@@ -33,8 +35,22 @@ class StockView(CamelModel):
     current: DailySnapshot | None
     evaluation: Evaluation
 
+    position: Position | None = None
+    """What you hold, folded from the transaction ledger. `None` for a stock with
+    no trades recorded — the five Avenue holdings, until that import exists."""
+
+    valuation: Valuation | None = None
+    """Today's worth and the portfolio weight. `None` without a position, since
+    there is nothing to price."""
+
     @classmethod
-    def of(cls, stock: Stock, evaluation: Evaluation) -> "StockView":
+    def of(
+        cls,
+        stock: Stock,
+        evaluation: Evaluation,
+        position: Position | None = None,
+        valuation: Valuation | None = None,
+    ) -> "StockView":
         return cls(
             ticker=stock.ticker,
             name=stock.name,
@@ -45,13 +61,32 @@ class StockView(CamelModel):
             list_type=stock.list_type,
             current=stock.current,
             evaluation=evaluation,
+            position=position,
+            valuation=valuation,
         )
 
 
+class PortfolioTotals(CamelModel):
+    """The portfolio as a whole, so the frontend does not re-add the parts."""
+
+    invested: Decimal
+    market_value: Decimal
+    unrealised_gain: Decimal
+    unrealised_gain_percent: Decimal
+    currency: Currency
+    """Everything above is in this one currency. Holdings priced in another are
+    excluded from the totals and carry no weight — see `Valuation.weight`."""
+
+    priced: int
+    unpriced: int
+    """How many holdings are in, and how many were left out for want of a rate."""
+
+
 class StockListResponse(CamelModel):
-    """GET /stocks — one list, already judged."""
+    """GET /stocks — one list, already judged and weighted."""
 
     stocks: list[StockView]
+    totals: PortfolioTotals | None = None
 
 
 class StockDetailResponse(CamelModel):

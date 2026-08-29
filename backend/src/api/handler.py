@@ -13,11 +13,13 @@ a Lambda that is only awake while someone has the page open.
 
 import datetime as dt
 import logging
+from decimal import Decimal
 from typing import Any
 
 import boto3
 
 from api.responses import (
+    PortfolioTotals,
     StockDetailResponse,
     StockListResponse,
     StockView,
@@ -26,12 +28,15 @@ from api.responses import (
 )
 from shared.categories import evaluate
 from shared.config import Config
-from shared.models import ListType
+from shared.models import Currency, ListType, Stock
+from shared.positions import Valuation, current_position, value, with_weights
 from shared.repository import (
     DynamoDbSnapshotRepository,
     DynamoDbStockRepository,
+    DynamoDbTransactionRepository,
     SnapshotRepository,
     StockRepository,
+    TransactionRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +47,86 @@ MAX_HISTORY_DAYS = 400
 stops a crafted `?days=99999` from scanning a ticker's entire history."""
 
 
-def list_stocks(stocks: StockRepository, raw_list_type: str | None) -> dict[str, Any]:
+BASE_CURRENCY = Currency.BRL
+"""The currency the portfolio is totalled in.
+
+Holdings priced in anything else are excluded from the totals and carry no
+weight. Including them without an exchange rate would not be an approximation —
+it would be adding unlike things. Collecting USDBRL is what removes this limit.
+"""
+
+
+def build_views(
+    stocks: list[Stock],
+    transactions: TransactionRepository,
+) -> tuple[list[StockView], PortfolioTotals | None]:
+    """Attach a position, a valuation and a weight to each stock.
+
+    All of it server-side, like the evaluations: the rulesets and the portfolio
+    maths are tested Python, and duplicating either in TypeScript would mean two
+    versions that drift.
+    """
+    ledger: dict[str, list[Any]] = {}
+    for transaction in transactions.all():
+        ledger.setdefault(transaction.ticker, []).append(transaction)
+
+    positions = {}
+    valuations: dict[str, Valuation] = {}
+    unpriced = 0
+
+    for stock in stocks:
+        rows = ledger.get(stock.ticker)
+        if not rows:
+            continue
+        position = current_position(stock.ticker, rows)
+        if position is None or position.quantity == 0:
+            continue
+        positions[stock.ticker] = position
+
+        # A position can only be priced if we have both a price and a way to
+        # express it in the base currency.
+        if stock.current is None or stock.currency is not BASE_CURRENCY:
+            unpriced += 1
+            continue
+        valuations[stock.ticker] = value(position, stock.current.price)
+
+    valuations = with_weights(valuations)
+
+    views = [
+        StockView.of(
+            stock,
+            evaluate(stock),
+            position=positions.get(stock.ticker),
+            valuation=valuations.get(stock.ticker),
+        )
+        for stock in stocks
+    ]
+
+    if not valuations:
+        return views, None
+
+    invested = sum((positions[t].invested for t in valuations), Decimal(0))
+    market = sum((v.market_value for v in valuations.values()), Decimal(0))
+    gain = market - invested
+    totals = PortfolioTotals(
+        invested=invested,
+        market_value=market,
+        unrealised_gain=gain,
+        unrealised_gain_percent=(
+            Decimal(0) if invested == 0 else (gain / invested * 100).quantize(Decimal("0.01"))
+        ),
+        currency=BASE_CURRENCY,
+        priced=len(valuations),
+        unpriced=unpriced,
+    )
+    return views, totals
+
+
+def list_stocks(
+    stocks: StockRepository,
+    transactions: TransactionRepository,
+    raw_list_type: str | None,
+) -> dict[str, Any]:
     """Portfolio or watchlist, each stock already evaluated."""
     if raw_list_type is None:
         found = [
@@ -57,15 +141,14 @@ def list_stocks(stocks: StockRepository, raw_list_type: str | None) -> dict[str,
             return error(400, f"Unknown listType '{raw_list_type}'. Expected one of: {allowed}.")
         found = stocks.list_by_type(list_type)
 
-    views = [
-        StockView.of(stock, evaluate(stock)) for stock in sorted(found, key=lambda s: s.ticker)
-    ]
-    return json_response(200, StockListResponse(stocks=views))
+    views, totals = build_views(sorted(found, key=lambda s: s.ticker), transactions)
+    return json_response(200, StockListResponse(stocks=views, totals=totals))
 
 
 def get_stock(
     stocks: StockRepository,
     snapshots: SnapshotRepository,
+    transactions: TransactionRepository,
     ticker: str,
     raw_days: str | None,
 ) -> dict[str, Any]:
@@ -83,10 +166,18 @@ def get_stock(
     today = dt.date.today()
     history = snapshots.history(stock.ticker, since=today - dt.timedelta(days=days), until=today)
 
+    rows = transactions.for_ticker(stock.ticker)
+    position = current_position(stock.ticker, rows) if rows else None
+    valuation = (
+        value(position, stock.current.price)
+        if position and position.quantity > 0 and stock.current
+        else None
+    )
+
     return json_response(
         200,
         StockDetailResponse(
-            stock=StockView.of(stock, evaluate(stock)),
+            stock=StockView.of(stock, evaluate(stock), position=position, valuation=valuation),
             history=history,
         ),
     )
@@ -96,6 +187,7 @@ def route(
     event: dict[str, Any],
     stocks: StockRepository,
     snapshots: SnapshotRepository,
+    transactions: TransactionRepository,
 ) -> dict[str, Any]:
     """Dispatch on API Gateway's `routeKey`, e.g. `GET /stocks/{ticker}`.
 
@@ -107,13 +199,13 @@ def route(
     path: dict[str, str] = event.get("pathParameters") or {}
 
     if route_key == "GET /stocks":
-        return list_stocks(stocks, params.get("listType"))
+        return list_stocks(stocks, transactions, params.get("listType"))
 
     if route_key == "GET /stocks/{ticker}":
         ticker = path.get("ticker", "")
         if not ticker:
             return error(400, "Missing ticker in the path.")
-        return get_stock(stocks, snapshots, ticker, params.get("days"))
+        return get_stock(stocks, snapshots, transactions, ticker, params.get("days"))
 
     return error(404, f"No route for '{route_key}'.")
 
@@ -134,6 +226,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             event,
             DynamoDbStockRepository(dynamodb.Table(config.stocks_table)),
             DynamoDbSnapshotRepository(dynamodb.Table(config.snapshots_table)),
+            DynamoDbTransactionRepository(dynamodb.Table(config.transactions_table)),
         )
     except Exception:
         logger.exception("Unhandled error serving %s", event.get("routeKey"))

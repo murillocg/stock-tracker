@@ -11,11 +11,15 @@ from shared.positions.position import (
     current_position,
     since_last_flat,
 )
+from shared.positions.valuation import Valuation, value, with_weights
 
 __all__ = [
     "LedgerError",
     "Position",
+    "Valuation",
     "build_position",
     "current_position",
     "since_last_flat",
+    "value",
+    "with_weights",
 ]
