@@ -30,6 +30,17 @@ class Position(CamelModel):
     """Accumulated across sales. Phase 4 reports on this; nothing reads it yet."""
 
 
+def _tidy(quantity: Decimal) -> Decimal:
+    """Trim a quantity without letting it turn into scientific notation.
+
+    `Decimal("400.00000000").normalize()` is `Decimal("4E+2")` — the same number,
+    useless in front of a person. `to_integral_value()` does not help either; it
+    keeps the exponent. Only `quantize(Decimal(1))` re-expands the digits.
+    """
+    trimmed = quantity.quantize(QUANTITY, rounding=ROUND_HALF_UP).normalize()
+    return trimmed.quantize(Decimal(1)) if trimmed == trimmed.to_integral_value() else trimmed
+
+
 class LedgerError(ValueError):
     """The ledger cannot be folded — it describes something impossible."""
 
@@ -86,7 +97,7 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
     return Position(
         ticker=ticker,
         currency=currency,
-        quantity=quantity.quantize(QUANTITY, rounding=ROUND_HALF_UP).normalize(),
+        quantity=_tidy(quantity),
         average_price=None if closed else average.quantize(MONEY, rounding=ROUND_HALF_UP),
         invested=(quantity * average).quantize(MONEY, rounding=ROUND_HALF_UP),
         realised_gain=realised.quantize(MONEY, rounding=ROUND_HALF_UP),

@@ -161,3 +161,19 @@ def test_same_day_trades_are_both_counted() -> None:
     assert position is not None
     assert position.quantity == Decimal("200")
     assert position.average_price == Decimal("39.00")
+
+
+def test_a_whole_quantity_is_not_rendered_in_scientific_notation() -> None:
+    """Decimal("400.00000000").normalize() is Decimal("4E+2") — same number,
+    useless in front of a person. Found by running a real B3 export through it."""
+    position = build_position("PETR4", [trade(1, BUY, "400", "25.51")])
+
+    assert position is not None
+    assert str(position.quantity) == "400"
+
+
+def test_a_fractional_quantity_keeps_its_digits() -> None:
+    position = build_position("MSFT", [trade(1, BUY, "1.25", "500", ticker="MSFT")])
+
+    assert position is not None
+    assert str(position.quantity) == "1.25"
