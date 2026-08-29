@@ -21,6 +21,17 @@ terraform {
 provider "aws" {
   region = var.aws_region
 
+  # Which local credentials to use. Naming it here rather than relying on
+  # whichever profile happens to be active means this project cannot quietly
+  # deploy into another project's account.
+  profile = var.aws_profile
+
+  # The seatbelt. Terraform refuses to plan or apply if the resolved credentials
+  # belong to an account not listed here — so a stale AWS_PROFILE, an exported
+  # AWS_ACCESS_KEY_ID, or a mistyped profile name fails loudly instead of
+  # creating eleven resources somewhere you did not intend.
+  allowed_account_ids = var.allowed_account_ids
+
   default_tags {
     tags = {
       Project   = var.project_name

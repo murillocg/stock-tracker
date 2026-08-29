@@ -9,22 +9,48 @@ mean a bucket and a lock table running permanently, which defeats the purpose.
 Back the file up if it matters — it is the only record of what exists, and it
 contains your API tokens.
 
+## Pick the AWS account first
+
+If you already use the AWS CLI for other projects, do this before anything else.
+A named profile keeps this project's credentials separate from everything already
+configured.
+
+```bash
+# Back up what you have. Cheap insurance.
+cp -a ~/.aws ~/.aws.backup-$(date +%F)
+
+# --profile creates a NEW section. Bare `aws configure`, with no --profile,
+# overwrites [default] instead — that is the one command to avoid.
+aws configure --profile stock-tracker
+
+# Note the account id; it goes in terraform.tfvars.
+aws sts get-caller-identity --profile stock-tracker
+```
+
+Credential resolution runs highest-first: `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+env vars, then `AWS_PROFILE`, then `[default]`. An env var already exported in your
+shell silently outranks the profile named in `terraform.tfvars` — which is exactly
+what `allowed_account_ids` exists to catch.
+
 ## First deploy
 
 ```bash
 # 1. Cross-compile the dependencies and stage the code
 backend/scripts/build_lambda.sh
 
-# 2. Fill in tokens
+# 2. Account, then tokens
 cd infra
 cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars
+$EDITOR terraform.tfvars      # aws_profile + allowed_account_ids first
 
 # 3. Review, then apply
 terraform init
-terraform plan
+terraform plan                # confirm 11 to add, 0 to change, 0 to destroy
 terraform apply
 ```
+
+If the credentials resolve to any account other than the one you listed,
+`plan` fails with `AWS account ID not allowed: <id>` and creates nothing.
 
 Keep `schedule_enabled = false` until a manual run has worked.
 

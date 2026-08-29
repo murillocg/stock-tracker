@@ -14,6 +14,34 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "aws_profile" {
+  description = <<-EOT
+    Named profile from ~/.aws/credentials to deploy with. Create it WITHOUT
+    disturbing anything already there:
+
+        aws configure --profile stock-tracker
+
+    Bare `aws configure`, with no --profile, overwrites [default] instead.
+    Leave null to fall back to the usual environment/default resolution.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "allowed_account_ids" {
+  description = <<-EOT
+    Account IDs this stack may deploy into. Terraform hard-fails if the resolved
+    credentials belong to anything else, which is what stops a stale AWS_PROFILE
+    or an exported AWS_ACCESS_KEY_ID from creating resources in the wrong place.
+
+    Find yours with:  aws sts get-caller-identity --profile stock-tracker
+
+    Empty list disables the check. Set it — it is the cheapest guardrail here.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "brapi_token" {
   description = "brapi.dev API token. Free plan. Required for any non-demo ticker."
   type        = string

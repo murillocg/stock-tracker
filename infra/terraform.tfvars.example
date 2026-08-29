@@ -3,6 +3,18 @@
 #
 #   cp terraform.tfvars.example terraform.tfvars
 
+# --- Which AWS account this deploys into -------------------------------------
+# Create the profile without touching your existing ones:
+#     cp -a ~/.aws ~/.aws.backup-$(date +%F)
+#     aws configure --profile stock-tracker
+#     aws sts get-caller-identity --profile stock-tracker
+#
+# Put that account id below. Terraform then refuses to run against any other
+# account, so a stale AWS_PROFILE cannot deploy this into the wrong place.
+aws_profile         = "stock-tracker"
+allowed_account_ids = ["111111111111"]
+
+# --- API credentials ---------------------------------------------------------
 brapi_token    = "your-brapi-token"
 bolsai_api_key = "your-bolsai-api-key"
 
