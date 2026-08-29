@@ -62,7 +62,7 @@ def since_last_flat(transactions: Sequence[Transaction]) -> list[Transaction]:
     running = Decimal(0)
     start = 0
     for index, transaction in enumerate(ordered):
-        if transaction.type is TransactionType.SELL:
+        if transaction.type in (TransactionType.SELL, TransactionType.TRANSFER_OUT):
             running -= transaction.quantity
         else:
             running += transaction.quantity
@@ -97,6 +97,8 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
       `(price - average) x quantity` as a realised gain
     - a BONUS adds free shares, leaving the invested amount alone, so the average
       falls in proportion — which is what a split does
+    - a TRANSFER carries shares between custodians at their existing cost, so it
+      moves quantity without touching the average or realising anything
 
     That second rule is the one that surprises people used to FIFO. Under FIFO a
     sale consumes specific lots and the remaining average shifts; here it cannot,
@@ -125,7 +127,20 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
                 "a single position cannot span two currencies."
             )
 
-        if transaction.type is TransactionType.BONUS:
+        if transaction.type is TransactionType.TRANSFER_OUT:
+            # Leaves at cost: no gain is realised, and the average of whatever
+            # stays behind is unchanged.
+            if transaction.quantity > quantity:
+                raise LedgerError(
+                    f"{ticker}: transferring {transaction.quantity} out on "
+                    f"{transaction.date} but only {quantity} held."
+                )
+            quantity -= transaction.quantity
+            continue
+
+        if transaction.type is TransactionType.BONUS or (
+            transaction.type is TransactionType.TRANSFER_IN and transaction.unit_price == 0
+        ):
             # Free shares: the amount invested does not move, so dividing it over
             # a larger quantity lowers the average by itself. A 2:1 split is
             # exactly "as many free shares as you already hold".
@@ -134,7 +149,7 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
             average = invested / quantity
             continue
 
-        if transaction.type is TransactionType.BUY:
+        if transaction.type in (TransactionType.BUY, TransactionType.TRANSFER_IN):
             cost = quantity * average + transaction.quantity * transaction.unit_price
             quantity += transaction.quantity
             average = cost / quantity

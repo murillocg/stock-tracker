@@ -55,6 +55,44 @@ ADJUSTMENTS: list[dict[str, Any]] = [
         "broker": "NU INVEST",
         "note": "Bonificação. Trades account for 1,092 of the 1,100 held.",
     },
+    # Custody transfers, 30/07/2020, Inter -> BTG. Absent from the Negociação
+    # export because they are not trades; taken from Movimentação. The IN price
+    # is the average Inter held at that moment, so the cost travels with the
+    # shares rather than being re-based.
+    {
+        "ticker": "BBAS3",
+        "date": dt.date(2020, 7, 30),
+        "type": TransactionType.TRANSFER_OUT,
+        "quantity": "150",
+        "broker": "INTER",
+        "note": "Moved to BTG. Without this Inter still appears to hold them.",
+    },
+    {
+        "ticker": "BBAS3",
+        "date": dt.date(2020, 7, 30),
+        "type": TransactionType.TRANSFER_IN,
+        "quantity": "150",
+        "unit_price": "29.09",
+        "broker": "BTG PACTUAL",
+        "note": "Arrived from Inter at Inter's average of 29.09 (100 @ 27.01 + 50 @ 33.25).",
+    },
+    {
+        "ticker": "BPAC11",
+        "date": dt.date(2020, 7, 30),
+        "type": TransactionType.TRANSFER_OUT,
+        "quantity": "80",
+        "broker": "INTER",
+        "note": "Moved to BTG.",
+    },
+    {
+        "ticker": "BPAC11",
+        "date": dt.date(2020, 7, 30),
+        "type": TransactionType.TRANSFER_IN,
+        "quantity": "80",
+        "unit_price": "28.31",
+        "broker": "BTG PACTUAL",
+        "note": "Arrived from Inter at Inter's average of 28.31.",
+    },
     {
         "ticker": "AXIA3",
         "date": dt.date(2026, 3, 1),

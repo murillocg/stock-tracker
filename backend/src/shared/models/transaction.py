@@ -36,6 +36,24 @@ class TransactionType(StrEnum):
     BBAS3 split 2-for-1 in 2024; ITSA4 issues bonificações regularly.
     """
 
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
+    """Shares moving between custodians, carrying their cost with them.
+
+    Not a trade: nothing is bought or sold, no gain is realised, and the total
+    holding does not change — only which broker holds it. They matter because
+    per-broker positions are what each broker's app shows and what goes in the
+    fiscal declaration, and B3's Negociação export has no record of them (they
+    are in Movimentação instead).
+
+    Without these, Inter still appears to hold 150 BBAS3 and 80 BPAC11 that moved
+    to BTG in July 2020.
+    """
+
+
+_PRICELESS = frozenset({TransactionType.BONUS, TransactionType.TRANSFER_OUT})
+"""Types with no price of their own: free shares, and shares leaving at cost."""
+
 
 class Transaction(CamelModel):
     """One trade. PK=`ticker`, SK=`<date>#<id>`.
@@ -53,8 +71,12 @@ class Transaction(CamelModel):
     convention the row happened to use."""
 
     unit_price: Decimal = Field(ge=0)
-    """Zero only for BONUS — a trade at no price is a data error, and the
-    validator below refuses it."""
+    """Zero only where no price exists: free shares, or shares leaving at cost.
+
+    A TRANSFER_IN still needs one — it is the average the sending broker held,
+    and demanding it here stops a transfer from silently re-basing the cost to
+    nothing.
+    """
 
     currency: Currency
 
@@ -96,7 +118,9 @@ class Transaction(CamelModel):
 
     @model_validator(mode="after")
     def _price_matches_type(self) -> "Transaction":
-        if self.type is not TransactionType.BONUS and self.unit_price <= 0:
+        if self.type in _PRICELESS:
+            return self
+        if self.unit_price <= 0:
             raise ValueError(f"a {self.type.value} needs a positive price, got {self.unit_price}")
         return self
 

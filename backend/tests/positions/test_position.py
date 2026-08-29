@@ -335,3 +335,69 @@ def test_trimming_keeps_the_ledger_intact() -> None:
 
     assert len(since_last_flat(ledger)) == 1
     assert len(ledger) == 3
+
+
+# --- custody transfers -------------------------------------------------------
+
+
+def transfer(day: int, kind: TransactionType, quantity: str, price: str = "0") -> Transaction:
+    return Transaction(
+        ticker="BBAS3",
+        date=dt.date(2026, 3, day),
+        type=kind,
+        quantity=Decimal(quantity),
+        unit_price=Decimal(price),
+        currency=Currency.BRL,
+    )
+
+
+OUT = TransactionType.TRANSFER_OUT
+IN = TransactionType.TRANSFER_IN
+
+
+def test_shares_leaving_realise_nothing_and_keep_the_average() -> None:
+    """A transfer is not a sale — nothing is sold, so nothing is gained."""
+    position = build_position("BBAS3", [trade(1, BUY, "150", "29.09"), transfer(2, OUT, "50")])
+
+    assert position is not None
+    assert position.quantity == Decimal("100")
+    assert position.average_price == Decimal("29.09")
+    assert position.realised_gain == Decimal("0.00")
+
+
+def test_shares_arriving_bring_their_cost_with_them() -> None:
+    """The IN price is the sending broker's average, so the cost is not re-based."""
+    position = build_position("BBAS3", [transfer(1, IN, "150", "29.09")])
+
+    assert position is not None
+    assert position.average_price == Decimal("29.09")
+    assert position.invested == Decimal("4363.50")
+
+
+def test_a_transfer_leaves_the_total_holding_unchanged() -> None:
+    inter = build_position("BBAS3", [trade(1, BUY, "150", "29.09"), transfer(2, OUT, "150")])
+    btg = build_position("BBAS3", [transfer(2, IN, "150", "29.09")])
+
+    assert inter is not None and btg is not None
+    assert inter.quantity == Decimal("0")
+    assert btg.quantity == Decimal("150")
+    assert btg.invested == Decimal("4363.50")
+
+
+def test_transferring_out_more_than_is_held_is_rejected() -> None:
+    with pytest.raises(LedgerError, match="transferring"):
+        build_position("BBAS3", [trade(1, BUY, "100", "29.09"), transfer(2, OUT, "150")])
+
+
+def test_a_transfer_out_needs_no_price_but_a_sale_does() -> None:
+    transfer(1, OUT, "50")  # no price, accepted
+
+    with pytest.raises(ValidationError):
+        transfer(1, TransactionType.SELL, "50")
+
+
+def test_transferring_everything_out_resets_the_broker() -> None:
+    """Inter held 150 BBAS3 until July 2020; without the transfer it still would."""
+    position = current_position("BBAS3", [trade(1, BUY, "150", "29.09"), transfer(2, OUT, "150")])
+
+    assert position is None or position.quantity == Decimal("0")
