@@ -33,7 +33,7 @@ fi
 
 echo "==> Cleaning ${BUILD_DIR}"
 rm -rf "${BUILD_DIR}"
-mkdir -p "${BUILD_DIR}/dependencies/python" "${BUILD_DIR}/shared/python" "${BUILD_DIR}/collector"
+mkdir -p "${BUILD_DIR}/dependencies/python" "${BUILD_DIR}/shared/python" "${BUILD_DIR}/collector" "${BUILD_DIR}/api"
 
 echo "==> Installing runtime dependencies for ${PLATFORM} / py${PYTHON_VERSION}"
 # --platform + --python-version force pip to resolve wheels for the TARGET, not for
@@ -54,6 +54,7 @@ echo "==> Installing runtime dependencies for ${PLATFORM} / py${PYTHON_VERSION}"
 echo "==> Staging application code"
 cp -R "${BACKEND_DIR}/src/shared" "${BUILD_DIR}/shared/python/shared"
 cp -R "${BACKEND_DIR}/src/collector" "${BUILD_DIR}/collector/collector"
+cp -R "${BACKEND_DIR}/src/api" "${BUILD_DIR}/api/api"
 
 echo "==> Stripping build noise"
 # __pycache__ holds .pyc files compiled for the local interpreter, and *.dist-info
@@ -64,6 +65,6 @@ find "${BUILD_DIR}" -type f -name "*.pyc" -delete
 
 echo
 echo "==> Built:"
-du -sh "${BUILD_DIR}"/dependencies "${BUILD_DIR}"/shared "${BUILD_DIR}"/collector
+du -sh "${BUILD_DIR}"/dependencies "${BUILD_DIR}"/shared "${BUILD_DIR}"/collector "${BUILD_DIR}"/api
 echo
 echo "Next: cd infra && terraform apply"

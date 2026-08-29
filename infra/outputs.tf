@@ -33,3 +33,13 @@ output "tail_logs_command" {
   description = "Follow the collector's output."
   value       = "aws logs tail ${aws_cloudwatch_log_group.collector.name} --region ${var.aws_region} --follow"
 }
+
+output "api_url" {
+  description = "Base URL of the read API. The Vue app's VITE_API_URL."
+  value       = aws_apigatewayv2_stage.default.invoke_url
+}
+
+output "api_smoke_command" {
+  description = "Fetch the portfolio, already evaluated."
+  value       = "curl -s '${aws_apigatewayv2_stage.default.invoke_url}/stocks?listType=PORTFOLIO' | jq ."
+}

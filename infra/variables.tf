@@ -142,3 +142,35 @@ variable "enable_point_in_time_recovery" {
   type        = bool
   default     = false
 }
+
+variable "api_memory_mb" {
+  description = "Read API memory. Small: one Query plus pure evaluation."
+  type        = number
+  default     = 256
+}
+
+variable "api_allowed_origins" {
+  description = <<-EOT
+    CORS origins for the read API. Open until the Vue app has a CloudFront domain
+    to name here. Every endpoint is read-only public market data, so this is not
+    a data risk today, but narrow it once the frontend is deployed.
+  EOT
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "api_throttle_rate" {
+  description = <<-EOT
+    Steady-state requests/second. A public endpoint with no throttle can be
+    looped by anyone; this caps what that could cost. One user refreshing a page
+    needs a fraction of this.
+  EOT
+  type        = number
+  default     = 20
+}
+
+variable "api_throttle_burst" {
+  description = "Burst allowance above the steady rate."
+  type        = number
+  default     = 40
+}
