@@ -241,7 +241,11 @@ def test_the_flag_defaults_to_applicable() -> None:
 
 
 def test_slow_grower_falls_back_to_the_manual_figures() -> None:
-    """No free API supplies these, so BBSE3's real numbers come from you."""
+    """No free API supplies these, so BBSE3's real numbers come from you.
+
+    96% payout on an 82% ROE is an asset-light broker distributing what it cannot
+    usefully reinvest — a thin cushion worth knowing about, not a failure.
+    """
     stock = build_stock(
         LynchCategory.SLOW_GROWER,
         manual_dividend_yield=Decimal("5.09"),
@@ -253,19 +257,42 @@ def test_slow_grower_falls_back_to_the_manual_figures() -> None:
     signals = signals_by_name(evaluation)
 
     assert signals["Dividend yield"] is Signal.GREEN
-    assert signals["Payout ratio"] is Signal.RED
-    assert evaluation.signal is Signal.RED
+    assert signals["Payout ratio"] is Signal.YELLOW
+    assert evaluation.signal is Signal.YELLOW
 
 
-def test_a_sustainable_payout_is_only_a_warning() -> None:
-    """CPLE3: 7.29% yield on a 73% payout — high, not yet reckless."""
+def test_a_well_covered_payout_is_green() -> None:
+    """CPLE3: 7.29% yield on a 73% payout, comfortably covered."""
     stock = build_stock(
         LynchCategory.SLOW_GROWER,
         manual_dividend_yield=Decimal("7.29"),
         manual_payout_ratio=Decimal("73.21"),
     )
 
-    assert evaluate(stock, build_snapshot()).signal is Signal.YELLOW
+    assert evaluate(stock, build_snapshot()).signal is Signal.GREEN
+
+
+def test_paying_out_more_than_it_earns_is_the_real_failure() -> None:
+    """No business model sustains this: it comes from debt, reserves or sales."""
+    stock = build_stock(
+        LynchCategory.SLOW_GROWER,
+        manual_dividend_yield=Decimal("8"),
+        manual_payout_ratio=Decimal("124"),
+    )
+
+    evaluation = evaluate(stock, build_snapshot())
+
+    assert signals_by_name(evaluation)["Payout ratio"] is Signal.RED
+    assert "more than it earns" in evaluation.checks[1].explanation
+
+
+def test_every_payout_verdict_explains_itself() -> None:
+    """ "Why is this red?" is the only question the traffic light exists to answer."""
+    for payout in (Decimal("5"), Decimal("50"), Decimal("90"), Decimal("150")):
+        stock = build_stock(LynchCategory.SLOW_GROWER, manual_payout_ratio=payout)
+        explanation = evaluate(stock, build_snapshot()).checks[1].explanation
+
+        assert str(payout) in explanation
 
 
 def test_a_provider_value_beats_the_manual_one() -> None:

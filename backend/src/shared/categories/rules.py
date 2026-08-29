@@ -35,41 +35,68 @@ LEVERAGE_BAND = Band(green=Decimal("2"), yellow=Decimal("3"))
 
 # --- SLOW_GROWER: the dividend, and whether it survives -----------------------
 DIVIDEND_YIELD_BAND = Band(green=Decimal("5"), yellow=Decimal("3"), lower_is_better=False)
-PAYOUT_BAND = Band(green=Decimal("60"), yellow=Decimal("80"))
-
+PAYOUT_COMFORTABLE = Decimal("80")
+PAYOUT_UNSUSTAINABLE = Decimal("100")
 PAYOUT_FLOOR = Decimal("20")
-"""Below this, a SLOW_GROWER is not one.
+"""Payout ratio boundaries, judged from both ends.
 
-The band above is monotonic — lower payout, safer dividend — which is right at
-the top end and wrong at the bottom. A company paying out 0% scores "maximally
-sustainable" on that logic, when what it actually means is that the income thesis
-does not hold and the stock belongs in another category. AXIA3 reports 0.
+A high payout is not itself a problem — that was the original mistake here. If a
+company has no way to earn a decent return on retained earnings, distributing
+them is the *right* capital allocation, and Lynch is scathing about firms that
+hoard cash and spend it badly. BBSE3 pays out 96% on an 82% ROE: an asset-light
+broker with nothing capital-intensive to reinvest in. That is the business model
+working, not a warning.
+
+What actually threatens the dividend is paying out more than you earn, which no
+business model sustains — it comes from debt, reserves or asset sales.
+
+So: below 20% the income thesis does not hold and the category is wrong; up to
+80% is a comfortable cushion; 80-100% is thin but legitimate; above 100% fails.
+
+The honest caveat is that all of this is a proxy for what really matters, which
+is earnings *volatility* — 90% of stable broker fees is safe, 90% of commodity
+earnings is not. Once there are a few quarters of history we can measure that
+directly instead.
 """
 
 
 def payout_check(value: Decimal | None) -> Check:
-    """Payout ratio, judged from both ends.
+    """Payout ratio, with a reason attached to every verdict."""
+    if value is None:
+        return check("Payout ratio", None, Band(green=Decimal(0), yellow=Decimal(0)), "")
 
-    Too high and the dividend is borrowed from the future; too low and there is
-    no dividend to be here for. Only the high end is a matter of degree, so the
-    floor is a flat RED rather than another band.
-    """
-    if value is not None and value < PAYOUT_FLOOR:
-        return Check(
-            name="Payout ratio",
-            value=value,
-            signal=Signal.RED,
-            explanation=(
-                f"Only {value}% of earnings paid out. A SLOW_GROWER is held for "
-                "its income; at this level the category is the wrong one."
+    if value < PAYOUT_FLOOR:
+        signal, why = (
+            Signal.RED,
+            (
+                f"Only {value}% of earnings paid out. A SLOW_GROWER is held for its "
+                "income; at this level the category is the wrong one."
             ),
         )
-    return check(
-        "Payout ratio",
-        value,
-        PAYOUT_BAND,
-        "Share of earnings paid out. Above 80% is hard to sustain.",
-    )
+    elif value <= PAYOUT_COMFORTABLE:
+        signal, why = (
+            Signal.GREEN,
+            (f"{value}% of earnings paid out, leaving a comfortable cushion if earnings dip."),
+        )
+    elif value <= PAYOUT_UNSUSTAINABLE:
+        signal, why = (
+            Signal.YELLOW,
+            (
+                f"{value}% of earnings paid out — a thin cushion. Fine for an "
+                "asset-light business with nothing worth reinvesting in; worth "
+                "watching for anyone else."
+            ),
+        )
+    else:
+        signal, why = (
+            Signal.RED,
+            (
+                f"{value}% — paying out more than it earns. Funded by debt, reserves "
+                "or asset sales, so it cannot continue indefinitely."
+            ),
+        )
+
+    return Check(name="Payout ratio", value=value, signal=signal, explanation=why)
 
 
 # --- ASSET_PLAY: Lynch buys the assets below book -----------------------------
