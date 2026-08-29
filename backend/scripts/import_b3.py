@@ -210,9 +210,12 @@ def build_adjustments() -> list[Transaction]:
             broker=a["broker"],
             note=a["note"],
             sequence=-1,  # adjustments settle before that day's trades
-            id=hashlib.sha1(f"adj|{a['ticker']}|{a['date']}|{a['quantity']}".encode()).hexdigest()[
-                :12
-            ],
+            # The TYPE has to be in here. A transfer pair shares a ticker, a date
+            # and a quantity, so without it both legs hash to one id, share a sort
+            # key, and the second silently overwrites the first.
+            id=hashlib.sha1(
+                f"adj|{a['ticker']}|{a['date']}|{a['type'].value}|{a['quantity']}".encode()
+            ).hexdigest()[:12],
         )
         for a in ADJUSTMENTS
     ]
