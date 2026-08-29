@@ -11,7 +11,7 @@ import uuid
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, model_validator
 
 from shared.models.base import CamelModel
 from shared.models.enums import Currency
@@ -19,16 +19,22 @@ from shared.models.types import Ticker
 
 
 class TransactionType(StrEnum):
-    """What the row records.
-
-    Only trades for now. SPLIT and BONUS belong here too — Brazilian companies
-    split and issue bonificações often, and both change quantity and average
-    price without a trade — but they are not modelled yet. Adding them later is
-    an enum member and a branch in the fold, not a migration.
-    """
+    """What the row records."""
 
     BUY = "BUY"
     SELL = "SELL"
+
+    BONUS = "BONUS"
+    """Shares received without paying for them.
+
+    Covers a desdobramento (split), a bonificação, and the share side of a
+    conversion — mechanically the same event. A 2:1 split on 200 shares is 200
+    free shares: quantity doubles while the amount invested stays put, so the
+    average halves by itself. Modelling it as a zero-price receipt means the fold
+    needs no special arithmetic for it.
+
+    BBAS3 split 2-for-1 in 2024; ITSA4 issues bonificações regularly.
+    """
 
 
 class Transaction(CamelModel):
@@ -46,7 +52,10 @@ class Transaction(CamelModel):
     negative quantity would make every guard in the fold conditional on which
     convention the row happened to use."""
 
-    unit_price: Decimal = Field(gt=0)
+    unit_price: Decimal = Field(ge=0)
+    """Zero only for BONUS — a trade at no price is a data error, and the
+    validator below refuses it."""
+
     currency: Currency
 
     broker: str | None = None
@@ -68,6 +77,12 @@ class Transaction(CamelModel):
     """Distinguishes trades made on the same day in the same ticker."""
 
     note: str | None = None
+
+    @model_validator(mode="after")
+    def _price_matches_type(self) -> "Transaction":
+        if self.type is not TransactionType.BONUS and self.unit_price <= 0:
+            raise ValueError(f"a {self.type.value} needs a positive price, got {self.unit_price}")
+        return self
 
     @property
     def sort_key(self) -> str:

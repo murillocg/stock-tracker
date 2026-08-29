@@ -53,3 +53,8 @@ output "frontend_bucket" {
   description = "Where the built files live. Private; reachable only via CloudFront."
   value       = aws_s3_bucket.frontend.id
 }
+
+output "transactions_table" {
+  description = "The trade ledger."
+  value       = aws_dynamodb_table.transactions.name
+}

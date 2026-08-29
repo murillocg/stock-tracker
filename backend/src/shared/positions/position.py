@@ -53,6 +53,8 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
     - a BUY moves the average toward the new price, in proportion to size
     - a SELL reduces the quantity and **leaves the average untouched**, booking
       `(price - average) x quantity` as a realised gain
+    - a BONUS adds free shares, leaving the invested amount alone, so the average
+      falls in proportion — which is what a split does
 
     That second rule is the one that surprises people used to FIFO. Under FIFO a
     sale consumes specific lots and the remaining average shifts; here it cannot,
@@ -78,6 +80,15 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
                 f"{ticker} has trades in both {currency} and {transaction.currency}; "
                 "a single position cannot span two currencies."
             )
+
+        if transaction.type is TransactionType.BONUS:
+            # Free shares: the amount invested does not move, so dividing it over
+            # a larger quantity lowers the average by itself. A 2:1 split is
+            # exactly "as many free shares as you already hold".
+            invested = quantity * average
+            quantity += transaction.quantity
+            average = invested / quantity
+            continue
 
         if transaction.type is TransactionType.BUY:
             cost = quantity * average + transaction.quantity * transaction.unit_price

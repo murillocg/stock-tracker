@@ -21,13 +21,15 @@ data "aws_iam_policy_document" "api" {
   statement {
     sid = "ReadTables"
 
-    # GetItem and Query only. The read API is structurally incapable of writing.
-    actions = ["dynamodb:GetItem", "dynamodb:Query"]
+    # Read verbs only. The API is structurally incapable of writing; Scan is
+    # here because the ledger has no partition to query across.
+    actions = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
 
     resources = [
       aws_dynamodb_table.stocks.arn,
       "${aws_dynamodb_table.stocks.arn}/index/*",
       aws_dynamodb_table.daily_snapshots.arn,
+      aws_dynamodb_table.transactions.arn,
     ]
   }
 
@@ -66,9 +68,10 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      STOCKS_TABLE    = aws_dynamodb_table.stocks.name
-      SNAPSHOTS_TABLE = aws_dynamodb_table.daily_snapshots.name
-      MARKET_TIMEZONE = var.market_timezone
+      STOCKS_TABLE       = aws_dynamodb_table.stocks.name
+      SNAPSHOTS_TABLE    = aws_dynamodb_table.daily_snapshots.name
+      TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
+      MARKET_TIMEZONE    = var.market_timezone
 
       # Config.from_env() requires these, though the read path never uses them.
       # Empty strings would fail the required() check, so they are passed through.

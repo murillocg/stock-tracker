@@ -24,6 +24,10 @@ class Config:
     alpha_vantage_api_key: str
     alert_sender: str
     alert_recipient: str
+    transactions_table: str = "stock-tracker-Transactions"
+    """Defaulted rather than required: the collector never touches the ledger,
+    so demanding it would fail a Lambda that has no use for it."""
+
     aws_region: str = "us-east-1"
     market_timezone: str = "America/Sao_Paulo"
     """Timezone that decides which trading day a run belongs to.
@@ -51,6 +55,7 @@ class Config:
         return cls(
             stocks_table=required("STOCKS_TABLE"),
             snapshots_table=required("SNAPSHOTS_TABLE"),
+            transactions_table=source.get("TRANSACTIONS_TABLE", "stock-tracker-Transactions"),
             brapi_token=required("BRAPI_TOKEN"),
             bolsai_api_key=required("BOLSAI_API_KEY"),
             alpha_vantage_api_key=required("ALPHA_VANTAGE_API_KEY"),

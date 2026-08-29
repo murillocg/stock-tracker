@@ -4,6 +4,7 @@ import datetime as dt
 from decimal import Decimal
 
 import pytest
+from pydantic import ValidationError
 
 from shared.models import Currency
 from shared.models.transaction import Transaction, TransactionType
@@ -193,3 +194,57 @@ def test_the_same_ticker_at_two_brokers_is_one_position() -> None:
     assert position is not None
     assert position.quantity == Decimal("600")
     assert position.average_price == Decimal("25.00")
+
+
+# --- splits and bonificações -------------------------------------------------
+
+
+def bonus(day: int, quantity: str, ticker: str = "PETR4") -> Transaction:
+    return Transaction(
+        ticker=ticker,
+        date=dt.date(2026, 3, day),
+        type=TransactionType.BONUS,
+        quantity=Decimal(quantity),
+        unit_price=Decimal(0),
+        currency=Currency.BRL,
+    )
+
+
+def test_a_two_for_one_split_halves_the_average_and_keeps_the_investment() -> None:
+    """BBAS3 split 2:1 in 2024. A split is 'as many free shares as you hold'."""
+    position = build_position("BBAS3", [trade(1, BUY, "200", "56.08"), bonus(5, "200", "BBAS3")])
+
+    assert position is not None
+    assert position.quantity == Decimal("400")
+    assert position.average_price == Decimal("28.04")
+    assert position.invested == Decimal("11216.00")  # unchanged by the split
+
+
+def test_a_bonificacao_lowers_the_average_in_proportion() -> None:
+    """ITSA4: 1,092 shares plus 8 free ones."""
+    position = build_position("ITSA4", [trade(1, BUY, "1092", "12.33"), bonus(5, "8", "ITSA4")])
+
+    assert position is not None
+    assert position.quantity == Decimal("1100")
+    assert position.average_price == Decimal("12.24")
+
+
+def test_free_shares_do_not_change_what_you_paid() -> None:
+    before = build_position("PETR4", [trade(1, BUY, "100", "40.00")])
+    after = build_position("PETR4", [trade(1, BUY, "100", "40.00"), bonus(5, "900")])
+
+    assert before is not None and after is not None
+    assert before.invested == after.invested
+
+
+def test_a_trade_at_no_price_is_rejected() -> None:
+    """Only a BONUS may be free; a BUY or SELL at zero is a data error."""
+    with pytest.raises(ValidationError):
+        Transaction(
+            ticker="PETR4",
+            date=dt.date(2026, 3, 1),
+            type=TransactionType.BUY,
+            quantity=Decimal("100"),
+            unit_price=Decimal(0),
+            currency=Currency.BRL,
+        )

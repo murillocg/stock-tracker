@@ -63,3 +63,33 @@ resource "aws_dynamodb_table" "daily_snapshots" {
     Name = "${var.project_name}-DailySnapshots"
   }
 }
+
+# The ledger. Append-only in practice: the collector never touches it, the API
+# only reads it, and corrections are recorded as further rows rather than edits.
+resource "aws_dynamodb_table" "transactions" {
+  name         = "${var.project_name}-Transactions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "ticker"
+  range_key    = "dateId"
+
+  attribute {
+    name = "ticker"
+    type = "S"
+  }
+
+  # `<iso date>#<id>`, not the date alone. Several trades in one ticker can share
+  # a day — ITSA4 has two on 2026-03-16 — and a date-only sort key would silently
+  # overwrite all but the last.
+  attribute {
+    name = "dateId"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = var.enable_point_in_time_recovery
+  }
+
+  tags = {
+    Name = "${var.project_name}-Transactions"
+  }
+}
