@@ -16,6 +16,27 @@ variable "github_repo" {
   default     = "stock-tracker"
 }
 
+variable "github_owner_id" {
+  description = <<-EOT
+    Numeric GitHub account id. Appears in the OIDC subject claim alongside the
+    name, because GitHub now issues the immutable subject form.
+
+      gh api users/OWNER --jq .id
+  EOT
+  type        = number
+  default     = 2607994
+}
+
+variable "github_repo_id" {
+  description = <<-EOT
+    Numeric repository id.
+
+      gh api repos/OWNER/REPO --jq .id
+  EOT
+  type        = number
+  default     = 1350787191
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
@@ -42,18 +63,31 @@ data "aws_iam_policy_document" "github_assume_role" {
     # a pull request, and `repo:owner/name:*` would let a workflow on an
     # attacker's branch assume this role.
     #
-    # Note the subject is the ENVIRONMENT, not the branch. A job that declares
-    # `environment: production` presents `...:environment:production` instead of
-    # `...:ref:refs/heads/main` — the environment replaces the ref in the claim.
-    # Pinning the branch here fails with a bare "Not authorized to perform
-    # sts:AssumeRoleWithWebIdentity", which says nothing about why.
+    # Two things about this subject are easy to get wrong, and both fail with the
+    # same unhelpful "Not authorized to perform sts:AssumeRoleWithWebIdentity".
     #
-    # The branch restriction still exists: it lives on the environment itself,
-    # which is configured to accept deployments only from main.
+    # 1. It names the ENVIRONMENT, not the branch. A job declaring
+    #    `environment: production` presents `...:environment:production` in place
+    #    of `...:ref:refs/heads/main` — the environment replaces the ref.
+    #
+    # 2. It carries NUMERIC IDS: `murillocg@2607994/stock-tracker@1350787191`.
+    #    GitHub issues this immutable form so that renaming the account or repo
+    #    does not silently break the trust. Pinning the ids rather than the names
+    #    is also the safer choice: a released username can be claimed by someone
+    #    else, an account id cannot.
+    #
+    # The branch restriction still exists — it lives on the GitHub environment,
+    # which only accepts deployments from main.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_owner}/${var.github_repo}:environment:production"]
+      values = [
+        join("", [
+          "repo:${var.github_owner}@${var.github_owner_id}",
+          "/${var.github_repo}@${var.github_repo_id}",
+          ":environment:production",
+        ])
+      ]
     }
   }
 }
