@@ -63,6 +63,13 @@ class TickerOutcome(StrEnum):
     SKIPPED = "SKIPPED"
     """Already collected for this date — a retry must not re-spend API quota."""
 
+    NOT_REGISTERED = "NOT_REGISTERED"
+    """Asked for by name, but absent from the Stocks table. Seed it first.
+
+    Only reachable when the event names tickers explicitly — a full run iterates
+    the registry, so every stock it sees is registered by definition.
+    """
+
     NOT_FOUND = "NOT_FOUND"
     """The provider does not know this ticker. Retrying will not help."""
 
@@ -192,20 +199,39 @@ def collect_one(
     return apply_changes(snapshot, changes)
 
 
-def _targets(stocks: StockRepository, tickers: Sequence[str] | None) -> list[Stock]:
-    """Which stocks this run covers.
+def _targets(
+    stocks: StockRepository,
+    tickers: Sequence[str] | None,
+) -> tuple[list[Stock], list[str]]:
+    """Which stocks this run covers, and which requested ones do not exist.
 
     Both lists by default: the watchlist needs prices too, for entry-point alerts.
-    An explicit ticker list is what makes the Phase 0 slice runnable by hand
-    against a single stock.
+    An explicit ticker list is what makes a single stock runnable by hand.
+
+    Returns a `(found, unregistered)` pair rather than silently dropping unknown
+    tickers. Asking for a stock by name and getting an empty report back is the
+    kind of silence that reads as "it ran and did nothing" instead of "you have
+    not registered that yet".
+
+    Returning two values is ordinary here — Python packs them into a tuple and
+    the caller unpacks positionally, no wrapper type needed. Java would want a
+    record or an out-parameter.
     """
     if tickers:
-        found = (stocks.get(ticker) for ticker in tickers)
-        return [stock for stock in found if stock is not None]
+        found: list[Stock] = []
+        unregistered: list[str] = []
+        for ticker in tickers:
+            stock = stocks.get(ticker)
+            if stock is None:
+                unregistered.append(ticker.strip().upper())
+            else:
+                found.append(stock)
+        return found, unregistered
+
     return [
         *stocks.list_by_type(ListType.PORTFOLIO),
         *stocks.list_by_type(ListType.WATCHLIST),
-    ]
+    ], []
 
 
 def collect_all(
@@ -234,10 +260,19 @@ def collect_all(
 
     `sleep` is injected so tests run instantly instead of actually waiting.
     """
-    results: list[TickerResult] = []
+    targets, unregistered = _targets(stocks, tickers)
+
+    results: list[TickerResult] = [
+        TickerResult(
+            ticker=ticker,
+            outcome=TickerOutcome.NOT_REGISTERED,
+            detail="Not in the Stocks table. Add it before collecting.",
+        )
+        for ticker in unregistered
+    ]
     called_provider = False
 
-    for stock in _targets(stocks, tickers):
+    for stock in targets:
         if skip_existing and snapshots.get(stock.ticker, as_of) is not None:
             results.append(TickerResult(ticker=stock.ticker, outcome=TickerOutcome.SKIPPED))
             continue

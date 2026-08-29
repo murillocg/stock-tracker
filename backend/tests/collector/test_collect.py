@@ -253,15 +253,42 @@ def test_an_explicit_ticker_list_narrows_the_run() -> None:
     assert [result.ticker for result in report.results] == ["PETR4"]
 
 
-def test_an_unregistered_ticker_is_ignored() -> None:
+def test_an_unregistered_ticker_is_reported_not_silently_dropped() -> None:
+    """Asking for a stock by name and getting an empty report reads as "it ran
+    and did nothing", when the real answer is "you have not seeded that yet"."""
     report = run(
         stocks=InMemoryStockRepository(),
         snapshots=InMemorySnapshotRepository(),
         provider=StubProvider({}),
-        tickers=["NOPE3"],
+        tickers=["itsa4"],
     )
 
-    assert report.results == []
+    assert report.summary[TickerOutcome.NOT_REGISTERED] == 1
+    assert report.results[0].ticker == "ITSA4"
+    assert report.results[0].detail is not None
+
+
+def test_a_full_run_can_never_report_unregistered() -> None:
+    """Without a ticker filter we iterate the registry, so every stock exists."""
+    report = run(
+        stocks=InMemoryStockRepository([build_stock("PETR4")]),
+        snapshots=InMemorySnapshotRepository(),
+        provider=StubProvider({"PETR4": build_quote("PETR4", "38.5")}),
+    )
+
+    assert report.summary[TickerOutcome.NOT_REGISTERED] == 0
+
+
+def test_a_mixed_request_collects_what_it_can() -> None:
+    report = run(
+        stocks=InMemoryStockRepository([build_stock("PETR4")]),
+        snapshots=InMemorySnapshotRepository(),
+        provider=StubProvider({"PETR4": build_quote("PETR4", "38.5")}),
+        tickers=["PETR4", "ITSA4"],
+    )
+
+    assert report.summary[TickerOutcome.COLLECTED] == 1
+    assert report.summary[TickerOutcome.NOT_REGISTERED] == 1
 
 
 def test_an_already_collected_ticker_is_skipped() -> None:
