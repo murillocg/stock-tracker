@@ -295,8 +295,12 @@ def test_a_closed_and_reopened_position_forgets_the_old_average() -> None:
         trade(3, BUY, "100", "50.04"),
     ]
 
-    assert current_position("BPAC11", ledger).average_price == Decimal("50.04")
-    assert build_position("BPAC11", ledger).average_price == Decimal("50.04")
+    current = current_position("BPAC11", ledger)
+    whole = build_position("BPAC11", ledger)
+
+    assert current is not None and whole is not None
+    assert current.average_price == Decimal("50.04")
+    assert whole.average_price == Decimal("50.04")
 
 
 def test_a_short_excursion_also_resets() -> None:
