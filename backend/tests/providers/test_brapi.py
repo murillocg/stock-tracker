@@ -65,6 +65,21 @@ def test_it_satisfies_the_quote_provider_protocol() -> None:
     assert provider.name is ProviderName.BRAPI
 
 
+def test_ratios_are_rounded_to_four_places() -> None:
+    """brapi returned a P/E of 4.208420706782756 in production — sixteen digits,
+    about four of them meaningful. Fetched ratios now match computed ones."""
+    payload = {
+        "results": [
+            {"symbol": "PETR4", "regularMarketPrice": 43.55, "priceEarnings": 4.208420706782756}
+        ]
+    }
+
+    quote = build_provider(ok(payload)).fetch_quote("PETR4")
+
+    assert quote.pe == Decimal("4.2084")
+    assert quote.price == Decimal("43.55")
+
+
 def test_it_maps_the_payload_onto_a_quote() -> None:
     quote = build_provider(ok(QUOTE_PAYLOAD)).fetch_quote("petr4")
 

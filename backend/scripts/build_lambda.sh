@@ -20,7 +20,10 @@ PLATFORM="manylinux2014_aarch64"
 
 # boto3 is deliberately absent: the Lambda runtime already ships it, and adding a
 # ~50 MB copy would only slow down cold starts.
-RUNTIME_DEPS=("pydantic>=2.9" "httpx>=0.27")
+# tzdata: zoneinfo needs an IANA database, and the Lambda image cannot be
+# relied on to ship /usr/share/zoneinfo. Without it the collector cannot tell
+# which trading day a run belongs to.
+RUNTIME_DEPS=("pydantic>=2.9" "httpx>=0.27" "tzdata")
 
 if [[ ! -x "${PYTHON}" ]]; then
   echo "error: ${PYTHON} not found. Create the venv first:" >&2

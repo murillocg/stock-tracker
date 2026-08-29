@@ -4,6 +4,8 @@ import datetime as dt
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from shared.indicators.arithmetic import as_ratio
+
 
 def to_decimal(value: Any) -> Decimal | None:
     """Coerce one JSON number to `Decimal`, or `None` if it is unusable.
@@ -25,6 +27,20 @@ def to_decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+
+
+def to_ratio(value: Any) -> Decimal | None:
+    """Coerce a JSON number to `Decimal` and round it to 4 places.
+
+    Providers hand back whatever precision their own arithmetic produced —
+    brapi's P/E arrived as 4.208420706782756, sixteen significant digits of
+    which about four are meaningful. Rounding here keeps the fetched indicators
+    on the same footing as the ones `shared.indicators` computes, and keeps the
+    DynamoDB items small.
+
+    Ratios only. Prices keep their full precision.
+    """
+    return as_ratio(to_decimal(value))
 
 
 def to_date(value: Any) -> dt.date | None:

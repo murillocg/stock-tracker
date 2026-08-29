@@ -12,7 +12,7 @@ from shared.providers.errors import (
     ProviderUnavailableError,
     TickerNotFoundError,
 )
-from shared.providers.parsing import to_decimal
+from shared.providers.parsing import to_decimal, to_ratio
 from shared.providers.quote import ProviderQuote
 
 DEFAULT_BASE_URL = "https://brapi.dev/api"
@@ -115,7 +115,7 @@ class BrapiProvider:
         if price is None or price <= 0:
             raise MalformedResponseError(f"brapi returned no usable price for {symbol}")
 
-        indicators = {field: to_decimal(result.get(key)) for field, key in QUOTE_FIELD_MAP.items()}
+        indicators = {field: to_ratio(result.get(key)) for field, key in QUOTE_FIELD_MAP.items()}
         # `model_validate` rather than the constructor: we are parsing a dict built
         # from a mapping table, and mypy cannot prove a `dict[str, Decimal | None]`
         # fits every keyword argument (`reference_date` is a date). Validation runs.

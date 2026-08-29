@@ -76,6 +76,17 @@ variable "collection_schedule" {
   default     = "cron(0 20 ? * MON-FRI *)"
 }
 
+variable "market_timezone" {
+  description = <<-EOT
+    Timezone that decides which trading day a run belongs to. Lambda's clock is
+    UTC and the collector runs after the B3 close, so date.today() would stamp
+    every snapshot with tomorrow — and that date is the sort key of the whole
+    time series. Normally the same value as schedule_timezone.
+  EOT
+  type        = string
+  default     = "America/Sao_Paulo"
+}
+
 variable "schedule_timezone" {
   description = "IANA timezone for the schedule. Handles DST so the cron does not have to."
   type        = string

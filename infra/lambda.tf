@@ -95,6 +95,7 @@ resource "aws_lambda_function" "collector" {
       ALERT_SENDER           = var.alert_sender
       ALERT_RECIPIENT        = var.alert_recipient
       PROVIDER_DELAY_SECONDS = tostring(var.provider_delay_seconds)
+      MARKET_TIMEZONE        = var.market_timezone
     }
   }
 

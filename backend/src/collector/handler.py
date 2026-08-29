@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import boto3
 import httpx
@@ -94,6 +95,21 @@ class CollectionReport(CamelModel):
         for result in self.results:
             counts[result.outcome] += 1
         return {outcome.value: count for outcome, count in counts.items()}
+
+
+def market_today(timezone: str) -> dt.date:
+    """Today's trading date in the market's own timezone, not the server's.
+
+    Lambda's clock is UTC. A 20:00 São Paulo run is 23:00 UTC, so `date.today()`
+    returns *tomorrow* — and since that date is the sort key of `DailySnapshots`,
+    every row would land on the wrong day and the change windows with it.
+
+    `ZoneInfo` reads the IANA database, which is why `tzdata` is in the Lambda
+    dependency layer: the runtime image cannot be relied on to ship
+    /usr/share/zoneinfo. It also means DST is handled for us — Brazil has no DST
+    today, but the US markets do, and this is the seam where that will matter.
+    """
+    return dt.datetime.now(ZoneInfo(timezone)).date()
 
 
 def fetch_fundamentals(
@@ -290,7 +306,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     config = Config.from_env()
 
     raw_as_of = event.get("asOf")
-    as_of = dt.date.fromisoformat(raw_as_of) if raw_as_of else dt.date.today()
+    as_of = dt.date.fromisoformat(raw_as_of) if raw_as_of else market_today(config.market_timezone)
     tickers = event.get("tickers")
 
     dynamodb = boto3.resource("dynamodb", region_name=config.aws_region)

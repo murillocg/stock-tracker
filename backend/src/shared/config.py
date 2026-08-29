@@ -24,6 +24,14 @@ class Config:
     alert_sender: str
     alert_recipient: str
     aws_region: str = "us-east-1"
+    market_timezone: str = "America/Sao_Paulo"
+    """Timezone that decides which trading day a run belongs to.
+
+    Lambda's clock is UTC, and the collector runs after the B3 close — 20:00 in
+    São Paulo is 23:00 UTC, so `date.today()` would stamp every snapshot with
+    *tomorrow*. The snapshot date is the sort key of the whole time series, so
+    that is not cosmetic.
+    """
     provider_delay_seconds: float = 1.0
     """Pause between upstream calls. Collection is sequential to respect free-tier
     rate limits — see CLAUDE.md, "no parallelism"."""
@@ -47,5 +55,6 @@ class Config:
             alert_sender=required("ALERT_SENDER"),
             alert_recipient=required("ALERT_RECIPIENT"),
             aws_region=source.get("AWS_REGION", "us-east-1"),
+            market_timezone=source.get("MARKET_TIMEZONE", "America/Sao_Paulo"),
             provider_delay_seconds=float(source.get("PROVIDER_DELAY_SECONDS", "1.0")),
         )

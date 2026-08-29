@@ -2,6 +2,7 @@
 
 import datetime as dt
 from decimal import Decimal
+from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
 
@@ -10,6 +11,7 @@ from collector.handler import (
     TickerOutcome,
     collect_all,
     collect_one,
+    market_today,
 )
 from shared.models import (
     Currency,
@@ -558,3 +560,22 @@ def test_the_report_serialises_for_cloudwatch() -> None:
     assert payload["asOf"] == "2026-08-28"
     assert payload["summary"]["COLLECTED"] == 1
     assert payload["results"][0]["ticker"] == "PETR4"
+
+
+def test_the_trading_day_comes_from_the_market_timezone() -> None:
+    """Lambda's clock is UTC; a 20:00 Sao Paulo run is 23:00 UTC the same day.
+
+    Without this the snapshot would be stamped tomorrow, and that date is the
+    sort key of the whole time series.
+    """
+    sao_paulo = market_today("America/Sao_Paulo")
+    utc = market_today("UTC")
+
+    assert sao_paulo <= utc
+    assert (utc - sao_paulo).days <= 1
+
+
+def test_an_unknown_timezone_fails_loudly() -> None:
+    """Proves the IANA database is actually reachable, not silently absent."""
+    with pytest.raises(ZoneInfoNotFoundError):
+        market_today("Mars/Olympus_Mons")

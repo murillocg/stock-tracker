@@ -18,7 +18,7 @@ from shared.providers.errors import (
     TickerNotFoundError,
 )
 from shared.providers.fundamentals import ProviderFundamentals
-from shared.providers.parsing import to_date, to_decimal
+from shared.providers.parsing import to_date, to_ratio
 
 DEFAULT_BASE_URL = "https://api.usebolsai.com/api/v1"
 
@@ -132,7 +132,7 @@ class BolsaiProvider:
             )
 
         indicators = {
-            field: to_decimal(payload.get(key)) for field, key in FUNDAMENTALS_FIELD_MAP.items()
+            field: to_ratio(payload.get(key)) for field, key in FUNDAMENTALS_FIELD_MAP.items()
         }
         return ProviderFundamentals.model_validate(
             {
