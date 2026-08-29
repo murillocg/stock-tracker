@@ -193,3 +193,45 @@ def test_a_missing_indicator_never_becomes_a_red() -> None:
 
     assert signals_by_name(evaluation)["Net debt / EBITDA"] is Signal.INSUFFICIENT_DATA
     assert evaluation.signal is Signal.GREEN
+
+
+# --- financials --------------------------------------------------------------
+
+
+def test_leverage_is_not_applicable_to_a_bank() -> None:
+    """BBAS3 collected at 12.73 and BPAC11 at -6. Both are arithmetic noise."""
+    stock = build_stock(LynchCategory.STALWART, uses_operating_leverage=False)
+    snapshot = build_snapshot(
+        pe=Decimal("9.38"), roe=Decimal("18"), net_debt_to_ebitda=Decimal("12.73")
+    )
+
+    evaluation = evaluate(stock, snapshot)
+
+    assert signals_by_name(evaluation)["Net debt / EBITDA"] is Signal.NOT_APPLICABLE
+    assert evaluation.signal is Signal.GREEN
+
+
+def test_not_applicable_is_not_the_same_as_missing() -> None:
+    """One says "go and find it", the other says "there is nothing to find"."""
+    stock = build_stock(LynchCategory.STALWART, uses_operating_leverage=False)
+    snapshot = build_snapshot(
+        pe=Decimal("9"), roe=Decimal("18"), net_debt_to_ebitda=Decimal("12.73")
+    )
+
+    check = next(c for c in evaluate(stock, snapshot).checks if c.name == "Net debt / EBITDA")
+
+    assert check.signal is Signal.NOT_APPLICABLE
+    assert check.value == Decimal("12.73")
+    assert evaluate(stock, snapshot).unresolved == []
+
+
+def test_leverage_still_counts_for_an_ordinary_company() -> None:
+    stock = build_stock(LynchCategory.STALWART, uses_operating_leverage=True)
+    snapshot = build_snapshot(pe=Decimal("9"), roe=Decimal("18"), net_debt_to_ebitda=Decimal("4.5"))
+
+    assert evaluate(stock, snapshot).signal is Signal.RED
+
+
+def test_the_flag_defaults_to_applicable() -> None:
+    """Most companies do have operating leverage; financials are the exception."""
+    assert build_stock(LynchCategory.STALWART).uses_operating_leverage is True

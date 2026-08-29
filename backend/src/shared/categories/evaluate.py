@@ -36,7 +36,7 @@ LOSS_MAKING = Check(
 )
 
 
-def fast_grower(snapshot: DailySnapshot) -> list[Check]:
+def fast_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """PEG below 1 is the whole thesis: growth you are not overpaying for."""
     if not profitable(snapshot):
         return [LOSS_MAKING]
@@ -53,7 +53,7 @@ def fast_grower(snapshot: DailySnapshot) -> list[Check]:
     ]
 
 
-def stalwart(snapshot: DailySnapshot) -> list[Check]:
+def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Steady compounder: a fair price, real returns, debt under control."""
     if not profitable(snapshot):
         return [LOSS_MAKING]
@@ -61,11 +61,11 @@ def stalwart(snapshot: DailySnapshot) -> list[Check]:
     return [
         check("P/E", snapshot.pe, STALWART_PE_BAND, "Price against trailing earnings."),
         check("ROE", snapshot.roe, STALWART_ROE_BAND, "Return on equity."),
-        leverage_check(snapshot),
+        leverage_check(snapshot, applicable=stock.uses_operating_leverage),
     ]
 
 
-def slow_grower(snapshot: DailySnapshot) -> list[Check]:
+def slow_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Bought for the dividend, so the dividend has to be real and sustainable.
 
     Both inputs are currently unavailable on any free plan, so this category
@@ -88,7 +88,7 @@ def slow_grower(snapshot: DailySnapshot) -> list[Check]:
     ]
 
 
-def asset_play(snapshot: DailySnapshot) -> list[Check]:
+def asset_play(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Below book value, where the assets are the thesis rather than earnings."""
     return [
         check(
@@ -100,7 +100,7 @@ def asset_play(snapshot: DailySnapshot) -> list[Check]:
     ]
 
 
-def cyclical(snapshot: DailySnapshot) -> list[Check]:
+def cyclical(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """P/B against its own band. P/E actively misleads here.
 
     At the bottom of a cycle earnings collapse and P/E looks *expensive* exactly
@@ -117,10 +117,10 @@ def cyclical(snapshot: DailySnapshot) -> list[Check]:
     ]
 
 
-def turnaround(snapshot: DailySnapshot) -> list[Check]:
+def turnaround(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
     """Falling debt and inflecting margins — mostly qualitative."""
     return [
-        leverage_check(snapshot),
+        leverage_check(snapshot, applicable=stock.uses_operating_leverage),
         check(
             "EBITDA margin",
             snapshot.ebitda_margin,
@@ -155,10 +155,9 @@ def evaluate(stock: Stock, snapshot: DailySnapshot | None = None) -> Evaluation:
     `snapshot` defaults to the denormalised `current` on the registry item, which
     is what the read API will pass.
 
-    Financials are a known gap: for a bank or a holding company, net debt/EBITDA
-    is meaningless, and tagging one as STALWART will surface a spurious RED on
-    that check. Fixing it needs a manual flag on `Stock`, in the same spirit as
-    `category` — not something the app should infer from a sector string.
+    Rulesets receive the whole `Stock`, not just the snapshot, because some rules
+    turn on facts about the company rather than its numbers — `uses_operating
+    _leverage` being the first of them.
     """
     latest = snapshot if snapshot is not None else stock.current
 
@@ -188,7 +187,7 @@ def evaluate(stock: Stock, snapshot: DailySnapshot | None = None) -> Evaluation:
             ],
         )
 
-    checks = _RULESETS[stock.category](latest)
+    checks = _RULESETS[stock.category](stock, latest)
     signal = (
         Signal.NEEDS_REVIEW
         if stock.category in HUMAN_JUDGEMENT

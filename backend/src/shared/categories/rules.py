@@ -80,13 +80,25 @@ def profitable(snapshot: DailySnapshot) -> bool:
     return snapshot.pe is not None and snapshot.pe > 0
 
 
-def leverage_check(snapshot: DailySnapshot) -> Check:
-    """Net debt / EBITDA, the one check that financials break.
+def leverage_check(snapshot: DailySnapshot, *, applicable: bool = True) -> Check:
+    """Net debt / EBITDA, the one check financials break.
 
-    Banks and holdings have no operating "net debt" — deposits are raw material,
-    not leverage. BPAC11 reports -6 and BBAS3 reports 12.73; both are arithmetic
-    noise. See the note in `evaluate` about how that is handled today.
+    Banks, insurers and holdings have no operating net debt — deposits and float
+    are raw material, not leverage. BPAC11 collected at -6 and BBAS3 at 12.73;
+    both are arithmetic noise, and judging on them is worse than not judging.
+
+    `applicable` comes from `Stock.uses_operating_leverage`, set by hand.
     """
+    if not applicable:
+        return Check(
+            name="Net debt / EBITDA",
+            value=snapshot.net_debt_to_ebitda,
+            signal=Signal.NOT_APPLICABLE,
+            explanation=(
+                "Not meaningful for a bank, insurer or holding company: deposits "
+                "and float are raw material, not leverage."
+            ),
+        )
     return check(
         "Net debt / EBITDA",
         snapshot.net_debt_to_ebitda,

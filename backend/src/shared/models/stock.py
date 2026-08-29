@@ -32,6 +32,18 @@ class Stock(CamelModel):
     category: LynchCategory | None = None
     """Set by hand. `None` means "not classified yet", so no ruleset applies."""
 
+    uses_operating_leverage: bool = True
+    """Whether net debt / EBITDA means anything for this company.
+
+    False for banks, insurers and holding companies: their deposits and float are
+    raw material, not leverage, so the ratio is arithmetic noise. BPAC11 collected
+    at -6 and BBAS3 at 12.73; judging either on that number is worse than not
+    judging it at all.
+
+    Set by hand, like `category`, and for the same reason — the app must not infer
+    it from a free-text sector string it does not control.
+    """
+
     list_type: ListType
     alert_rules: dict[AlertType, AlertRule] = Field(default_factory=dict)
 

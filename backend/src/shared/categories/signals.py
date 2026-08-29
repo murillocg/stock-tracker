@@ -32,6 +32,14 @@ class Signal(StrEnum):
     completely different actions.
     """
 
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    """The number exists but means nothing for this company.
+
+    Net debt / EBITDA on a bank, for instance. Deliberately not the same as
+    INSUFFICIENT_DATA: there is no missing data to go and find, and no amount of
+    paying for a better provider would change the answer.
+    """
+
 
 # Worst-wins ordering when several checks disagree.
 #
@@ -39,9 +47,10 @@ class Signal(StrEnum):
 # in a way "mixed" does not. RED still outranks it, because a clear red flag is
 # more actionable than a request to go and look.
 #
-# INSUFFICIENT_DATA is deliberately absent from the scale. It is not a degree of
-# badness, it is the absence of an answer, so it only survives when nothing else
-# was decidable.
+# INSUFFICIENT_DATA and NOT_APPLICABLE are deliberately absent from the scale.
+# Neither is a degree of badness — one is the absence of an answer, the other the
+# absence of a question — so they never drag a verdict down, and INSUFFICIENT_DATA
+# only survives when nothing else was decidable.
 _SEVERITY: dict[Signal, int] = {
     Signal.GREEN: 0,
     Signal.YELLOW: 1,
