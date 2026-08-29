@@ -95,11 +95,12 @@ resource "aws_apigatewayv2_api" "main" {
   description   = "Read API for the stock tracker frontend."
 
   cors_configuration {
-    # The browser sends an Origin header the CloudFront distribution does not know
-    # about yet, so this is left open until the frontend has a real domain. Not a
-    # data risk today — every endpoint is read-only and the data is public market
-    # figures — but it should be narrowed once the Vue app is deployed.
-    allow_origins = var.api_allowed_origins
+    # Narrowed from "*" now that the app has a home: the CloudFront distribution,
+    # plus whatever is listed for local development.
+    allow_origins = concat(
+      ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+      var.api_extra_allowed_origins,
+    )
     allow_methods = ["GET", "OPTIONS"]
     allow_headers = ["content-type"]
     max_age       = 3600

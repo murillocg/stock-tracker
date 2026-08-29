@@ -43,3 +43,13 @@ output "api_smoke_command" {
   description = "Fetch the portfolio, already evaluated."
   value       = "curl -s '${aws_apigatewayv2_stage.default.invoke_url}/stocks?listType=PORTFOLIO' | jq ."
 }
+
+output "frontend_url" {
+  description = "The app. CloudFront's own hostname, HTTPS included."
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
+output "frontend_bucket" {
+  description = "Where the built files live. Private; reachable only via CloudFront."
+  value       = aws_s3_bucket.frontend.id
+}

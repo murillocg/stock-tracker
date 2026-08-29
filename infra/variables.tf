@@ -191,3 +191,20 @@ variable "api_throttle_burst" {
   type        = number
   default     = 40
 }
+
+variable "cloudfront_price_class" {
+  description = <<-EOT
+    Which edge locations serve the app. PriceClass_All includes South America, so
+    a viewer in Brazil is served from Sao Paulo rather than Miami. CloudFront's
+    always-free tier covers 1 TB/month regardless of class, and this app serves a
+    few megabytes, so the cheaper classes save nothing real and cost latency.
+  EOT
+  type        = string
+  default     = "PriceClass_All"
+}
+
+variable "api_extra_allowed_origins" {
+  description = "Origins allowed alongside the CloudFront domain. Vite dev server by default."
+  type        = list(string)
+  default     = ["http://localhost:5173"]
+}
