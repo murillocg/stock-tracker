@@ -20,11 +20,13 @@ backend/build/
 *.tfstate.*
 # terraform.tfvars holds API tokens. The .example file is not matched by this.
 *.tfvars
+# Holds the state bucket name, which embeds the AWS account id.
+infra/backend.hcl
 
-# Angular / Node
+# Node / Vite
 node_modules/
 frontend/dist/
-frontend/.angular/
+frontend/.vite/
 
 # OS / editors
 .DS_Store

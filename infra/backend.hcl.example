@@ -1,0 +1,8 @@
+# Copy to backend.hcl and fill in. Gitignored: the bucket name contains the
+# AWS account id, and this repository is public.
+#
+#   ./bootstrap-state.sh          prints both values
+#   terraform init -backend-config=backend.hcl
+
+bucket         = "stock-tracker-tfstate-YOUR_ACCOUNT_ID"
+dynamodb_table = "stock-tracker-tflock"

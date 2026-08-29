@@ -1,0 +1,92 @@
+name: Deploy
+
+# Manual only. `terraform apply` changes live infrastructure, and commits land
+# directly on main with no pull request in between — so the button press is the
+# review step. Change `workflow_dispatch` to `push: branches: [main]` to make it
+# automatic.
+on:
+  workflow_dispatch:
+    inputs:
+      plan_only:
+        description: "Plan without applying"
+        type: boolean
+        default: false
+
+# `id-token: write` is what lets the job mint an OIDC token. Without it the role
+# assumption fails with a confusing credentials error.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Terraform's lock would reject a second run anyway; failing here is clearer
+  # than failing halfway through an apply.
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # build_lambda.sh expects backend/.venv, and cross-compiles the wheels for
+      # arm64 Linux regardless of the runner's own platform.
+      - name: Build the Lambda artefacts
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/pip install -q -e "backend[dev]"
+          backend/scripts/build_lambda.sh
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          echo "VITE_API_URL=${{ vars.VITE_API_URL }}" > .env.production.local
+          npm run build
+
+      # `aws_profile` is deliberately not set: terraform.tfvars is gitignored, so
+      # in CI the variable falls back to its null default and the provider uses the
+      # assumed-role credentials. Passing an empty profile name would break it.
+      - name: Plan
+        run: |
+          terraform -chdir=infra init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+          terraform -chdir=infra plan -input=false -out=tfplan
+        env:
+          # Secrets reach Terraform as TF_VAR_*, never written to a tfvars file
+          # on disk. They still end up in state, which is why the state bucket is
+          # private and encrypted.
+          TF_VAR_brapi_token: ${{ secrets.BRAPI_TOKEN }}
+          TF_VAR_bolsai_api_key: ${{ secrets.BOLSAI_API_KEY }}
+          TF_VAR_alpha_vantage_api_key: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          TF_VAR_alert_sender: ${{ vars.ALERT_SENDER }}
+          TF_VAR_alert_recipient: ${{ vars.ALERT_RECIPIENT }}
+          TF_VAR_allowed_account_ids: '["${{ vars.AWS_ACCOUNT_ID }}"]'
+
+      - name: Apply
+        if: ${{ !inputs.plan_only }}
+        run: terraform -chdir=infra apply -input=false tfplan

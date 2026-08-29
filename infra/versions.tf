@@ -12,10 +12,23 @@ terraform {
     }
   }
 
-  # State stays local. A remote S3 backend would mean a bucket and a lock table
-  # running permanently, which is the opposite of what this project is for. The
-  # trade-off: terraform.tfstate is the only record of what exists, it is
-  # gitignored (it holds the API tokens), so back it up if it matters.
+  # State lives in S3 so that CI can deploy — local state is only reachable from
+  # the laptop that holds it. The earlier objection to a remote backend was cost,
+  # and it does not survive scrutiny: a versioned bucket holding 90 KB and an
+  # on-demand lock table are effectively free.
+  #
+  # Created by ./bootstrap-state.sh, deliberately outside Terraform: a config that
+  # manages its own backend can be asked to delete the bucket its state lives in.
+  # Partial config: the bucket name embeds the AWS account id, and this repo is
+  # public. Terraform backends cannot read variables, so the remaining settings
+  # come from backend.hcl (gitignored) or -backend-config flags in CI.
+  #
+  #   terraform init -backend-config=backend.hcl
+  backend "s3" {
+    key     = "stock-tracker/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
+  }
 }
 
 provider "aws" {

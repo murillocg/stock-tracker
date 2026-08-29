@@ -1,0 +1,83 @@
+name: CI
+
+# Runs on everything. Needs no AWS access at all — the checks are lint, types,
+# tests and a frontend build, none of which touch the cloud.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Must match the Lambda runtime in infra/lambda.tf. A mismatch here
+          # would pass CI and fail on deploy.
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          python -m ruff check src tests scripts
+          python -m ruff format --check src tests scripts
+
+      - name: Types
+        run: python -m mypy src tests scripts
+
+      - name: Tests
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # `npm run build` runs vue-tsc first, so this covers type checking too.
+      - name: Type-check and build
+        run: npm run build
+
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      # Formatting and syntax only. `terraform validate` needs providers but no
+      # credentials, and `-backend=false` keeps it from reaching for S3 state.
+      - name: Format
+        run: terraform -chdir=infra fmt -check -recursive
+
+      - name: Validate
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
