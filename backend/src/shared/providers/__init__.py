@@ -6,6 +6,7 @@ Two narrow capabilities, deliberately not merged into one interface:
 - `FundamentalsProvider` -> statement indicators (bolsai)
 """
 
+from shared.providers.alpha_vantage import AlphaVantageProvider
 from shared.providers.bolsai import BolsaiProvider
 from shared.providers.brapi import BrapiProvider
 from shared.providers.errors import (
@@ -27,6 +28,7 @@ from shared.providers.protocol import FundamentalsProvider, QuoteProvider
 from shared.providers.quote import ProviderQuote
 
 __all__ = [
+    "AlphaVantageProvider",
     "AuthenticationError",
     "BolsaiProvider",
     "BrapiProvider",

@@ -62,6 +62,7 @@ def config() -> Config:
             "SNAPSHOTS_TABLE": "DailySnapshots",
             "BRAPI_TOKEN": "test-token",
             "BOLSAI_API_KEY": "test-key",
+            "ALPHA_VANTAGE_API_KEY": "test-av-key",
             "ALERT_SENDER": "alerts@example.com",
             "ALERT_RECIPIENT": "me@example.com",
         }

@@ -92,6 +92,7 @@ resource "aws_lambda_function" "collector" {
       SNAPSHOTS_TABLE        = aws_dynamodb_table.daily_snapshots.name
       BRAPI_TOKEN            = var.brapi_token
       BOLSAI_API_KEY         = var.bolsai_api_key
+      ALPHA_VANTAGE_API_KEY  = var.alpha_vantage_api_key
       ALERT_SENDER           = var.alert_sender
       ALERT_RECIPIENT        = var.alert_recipient
       PROVIDER_DELAY_SECONDS = tostring(var.provider_delay_seconds)

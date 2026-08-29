@@ -26,5 +26,8 @@ class ProviderFundamentals(FetchedIndicators):
     cannot be compared against the previous quarter, so they are not usable."""
 
     roic: Decimal | None = None
+    payout_ratio: Decimal | None = None
+    """Absent from bolsai, present in Alpha Vantage's OVERVIEW."""
+
     revenue_cagr_5y: Decimal | None = None
     earnings_cagr_5y: Decimal | None = None

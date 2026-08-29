@@ -17,6 +17,7 @@ allowed_account_ids = ["111111111111"]
 # --- API credentials ---------------------------------------------------------
 brapi_token    = "your-brapi-token"
 bolsai_api_key = "your-bolsai-api-key"
+alpha_vantage_api_key = "your-alpha-vantage-key"   # US tickers; free, 25 req/day
 
 alert_sender    = "alerts@yourdomain.com"
 alert_recipient = "you@example.com"

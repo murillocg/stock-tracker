@@ -54,6 +54,16 @@ variable "bolsai_api_key" {
   sensitive   = true
 }
 
+variable "alpha_vantage_api_key" {
+  description = <<-EOT
+    Alpha Vantage key, for US tickers. Free at alphavantage.co/support/#api-key.
+    25 requests/day, and we spend 2 per stock, so this caps US holdings around a
+    dozen. Unlike the B3 sources it does supply dividend yield and payout ratio.
+  EOT
+  type        = string
+  sensitive   = true
+}
+
 variable "alert_sender" {
   description = "Verified SES sender address. Unused until Phase 2, but Config requires it."
   type        = string

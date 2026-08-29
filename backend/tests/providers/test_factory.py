@@ -20,9 +20,13 @@ def test_the_registry_serves_brapi(config: Config) -> None:
     assert isinstance(get_provider(registry, ProviderName.BRAPI), BrapiProvider)
 
 
-@pytest.mark.parametrize("name", [ProviderName.BOLSAI, ProviderName.ALPHA_VANTAGE])
-def test_an_unimplemented_provider_fails_loudly(config: Config, name: ProviderName) -> None:
-    """Phase 0 is a single slice through brapi; the rest must not fail silently."""
+def test_a_provider_absent_from_a_registry_fails_loudly(config: Config) -> None:
+    """bolsai serves fundamentals only — asking it for a quote must not be silent.
+
+    Its `/fundamentals` does carry a close_price, but it is the quarter-end close,
+    not today's, so it deliberately has no place in the quote registry.
+    """
+    name = ProviderName.BOLSAI
     with httpx.Client() as client:
         registry = build_quote_registry(client, config)
 

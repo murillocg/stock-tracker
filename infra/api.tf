@@ -72,10 +72,11 @@ resource "aws_lambda_function" "api" {
 
       # Config.from_env() requires these, though the read path never uses them.
       # Empty strings would fail the required() check, so they are passed through.
-      BRAPI_TOKEN     = var.brapi_token
-      BOLSAI_API_KEY  = var.bolsai_api_key
-      ALERT_SENDER    = var.alert_sender
-      ALERT_RECIPIENT = var.alert_recipient
+      BRAPI_TOKEN           = var.brapi_token
+      BOLSAI_API_KEY        = var.bolsai_api_key
+      ALPHA_VANTAGE_API_KEY = var.alpha_vantage_api_key
+      ALERT_SENDER          = var.alert_sender
+      ALERT_RECIPIENT       = var.alert_recipient
     }
   }
 

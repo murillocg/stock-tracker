@@ -6,6 +6,7 @@ import httpx
 
 from shared.config import Config
 from shared.models import ProviderName
+from shared.providers.alpha_vantage import AlphaVantageProvider
 from shared.providers.bolsai import BolsaiProvider
 from shared.providers.brapi import BrapiProvider
 from shared.providers.errors import ProviderError
@@ -29,6 +30,7 @@ def build_quote_registry(client: httpx.Client, config: Config) -> dict[ProviderN
     """
     return {
         ProviderName.BRAPI: BrapiProvider(client, config.brapi_token),
+        ProviderName.ALPHA_VANTAGE: AlphaVantageProvider(client, config.alpha_vantage_api_key),
     }
 
 
@@ -38,10 +40,14 @@ def build_fundamentals_registry(
     """Providers that can supply statement-derived indicators.
 
     brapi is absent: its fundamentals live behind the R$139,99/mo Pro plan.
-    ALPHA_VANTAGE is absent because US coverage is not built yet.
+
+    Note AlphaVantageProvider appears in BOTH registries — the same instance
+    satisfies `QuoteProvider` and `FundamentalsProvider`. Structural typing needs
+    no `implements` list, so one class covering two capabilities costs nothing.
     """
     return {
         ProviderName.BOLSAI: BolsaiProvider(client, config.bolsai_api_key),
+        ProviderName.ALPHA_VANTAGE: AlphaVantageProvider(client, config.alpha_vantage_api_key),
     }
 
 

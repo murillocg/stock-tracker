@@ -21,6 +21,7 @@ class Config:
     snapshots_table: str
     brapi_token: str
     bolsai_api_key: str
+    alpha_vantage_api_key: str
     alert_sender: str
     alert_recipient: str
     aws_region: str = "us-east-1"
@@ -52,6 +53,7 @@ class Config:
             snapshots_table=required("SNAPSHOTS_TABLE"),
             brapi_token=required("BRAPI_TOKEN"),
             bolsai_api_key=required("BOLSAI_API_KEY"),
+            alpha_vantage_api_key=required("ALPHA_VANTAGE_API_KEY"),
             alert_sender=required("ALERT_SENDER"),
             alert_recipient=required("ALERT_RECIPIENT"),
             aws_region=source.get("AWS_REGION", "us-east-1"),
