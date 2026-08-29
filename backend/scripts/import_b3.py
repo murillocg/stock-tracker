@@ -55,17 +55,24 @@ ADJUSTMENTS: list[dict[str, Any]] = [
         "broker": "NU INVEST",
         "note": "Bonificação. Trades account for 1,092 of the 1,100 held.",
     },
-    # Custody transfers, 30/07/2020, Inter -> BTG. Absent from the Negociação
-    # export because they are not trades; taken from Movimentação. The IN price
-    # is the average Inter held at that moment, so the cost travels with the
-    # shares rather than being re-based.
+    # Portabilidade from Inter to BTG on 30/07/2020. Fourteen tickers move on that
+    # one day in the Movimentação export, each as "debit N from BTG, debit N from
+    # Inter, credit 2N to BTG" — B3 zeroing both accounts and re-crediting the
+    # combined total. Only BBAS3 and BPAC11 are still held.
+    #
+    # Not a general rule: `Transferência` rows on other dates are frequently a
+    # debit and credit at the SAME institution, which is not a custody move at
+    # all. Those are deliberately ignored rather than guessed at.
+    #
+    # The IN price is Inter's average at that moment, so the cost travels with
+    # the shares instead of being re-based.
     {
         "ticker": "BBAS3",
         "date": dt.date(2020, 7, 30),
         "type": TransactionType.TRANSFER_OUT,
         "quantity": "150",
         "broker": "INTER",
-        "note": "Moved to BTG. Without this Inter still appears to hold them.",
+        "note": "Portabilidade to BTG. Without it Inter still appears to hold them.",
     },
     {
         "ticker": "BBAS3",
@@ -82,7 +89,7 @@ ADJUSTMENTS: list[dict[str, Any]] = [
         "type": TransactionType.TRANSFER_OUT,
         "quantity": "80",
         "broker": "INTER",
-        "note": "Moved to BTG.",
+        "note": "Portabilidade to BTG.",
     },
     {
         "ticker": "BPAC11",
