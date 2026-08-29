@@ -1,15 +1,20 @@
 name: CI
 
-# Runs on everything. Needs no AWS access at all — the checks are lint, types,
-# tests and a frontend build, none of which touch the cloud.
-#
-# `workflow_call` makes this callable from deploy.yml, so the deploy runs exactly
-# these checks rather than a second copy of them that can drift.
+# One workflow. The checks run on every push and pull request; the deploy job is
+# gated to a manual run, and is the only job that can reach AWS.
 on:
   push:
   pull_request:
-  workflow_call:
+  workflow_dispatch:
+    inputs:
+      plan_only:
+        description: "Plan without applying"
+        type: boolean
+        default: false
 
+# Narrow by default. `id-token: write` — the permission that lets a job mint an
+# OIDC token and assume the AWS role — is granted to the deploy job alone, so a
+# push-triggered run has no path to the cloud even though it shares this file.
 permissions:
   contents: read
 
@@ -76,12 +81,95 @@ jobs:
         with:
           terraform_version: "1.5.7"
 
-      # Formatting and syntax only. `terraform validate` needs providers but no
-      # credentials, and `-backend=false` keeps it from reaching for S3 state.
       - name: Format
         run: terraform -chdir=infra fmt -check -recursive
 
+      # `validate` needs providers but no credentials, and -backend=false keeps
+      # it from reaching for S3 state.
       - name: Validate
         run: |
           terraform -chdir=infra init -backend=false -input=false
           terraform -chdir=infra validate
+
+  deploy:
+    # Manual only. `terraform apply` changes live infrastructure, and commits land
+    # directly on main with no pull request in between — so the button press is
+    # the review step. Drop this line to deploy on every push to main.
+    if: github.event_name == 'workflow_dispatch'
+    needs: [backend, frontend, terraform]
+
+    runs-on: ubuntu-latest
+    environment: production
+
+    # The only job that can assume the AWS role.
+    permissions:
+      contents: read
+      id-token: write
+
+    concurrency:
+      # Terraform's lock would reject a second run anyway; failing here is
+      # clearer than failing halfway through an apply.
+      group: deploy
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # build_lambda.sh expects backend/.venv, and cross-compiles the wheels for
+      # arm64 Linux regardless of the runner's own platform.
+      - name: Build the Lambda artefacts
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/bin/pip install -q -e "backend[dev]"
+          backend/scripts/build_lambda.sh
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          echo "VITE_API_URL=${{ vars.VITE_API_URL }}" > .env.production.local
+          npm run build
+
+      # `aws_profile` is deliberately unset: terraform.tfvars is gitignored, so in
+      # CI the variable falls back to its null default and the provider uses the
+      # assumed-role credentials. Passing an empty profile name would break it.
+      - name: Plan
+        run: |
+          terraform -chdir=infra init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+          terraform -chdir=infra plan -input=false -out=tfplan
+        env:
+          # Secrets reach Terraform as TF_VAR_*, never written to a tfvars file on
+          # disk. They still end up in state, which is why the state bucket is
+          # private and encrypted.
+          TF_VAR_brapi_token: ${{ secrets.BRAPI_TOKEN }}
+          TF_VAR_bolsai_api_key: ${{ secrets.BOLSAI_API_KEY }}
+          TF_VAR_alpha_vantage_api_key: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          TF_VAR_alert_sender: ${{ vars.ALERT_SENDER }}
+          TF_VAR_alert_recipient: ${{ vars.ALERT_RECIPIENT }}
+          TF_VAR_allowed_account_ids: '["${{ vars.AWS_ACCOUNT_ID }}"]'
+
+      - name: Apply
+        if: ${{ !inputs.plan_only }}
+        run: terraform -chdir=infra apply -input=false tfplan
