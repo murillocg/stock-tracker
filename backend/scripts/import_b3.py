@@ -24,7 +24,7 @@ import boto3
 import openpyxl
 
 from shared.models import Currency, Transaction, TransactionType
-from shared.positions import LedgerError, build_position
+from shared.positions import LedgerError, current_position
 from shared.repository import DynamoDbTransactionRepository
 
 SHEET = "Negociação"
@@ -36,77 +36,43 @@ position; leaving the suffix on would split every holding in two."""
 BROKERS = {"NU": "NU INVEST", "BTG": "BTG PACTUAL", "INTER": "INTER", "RICO": "RICO"}
 
 ADJUSTMENTS: list[dict[str, Any]] = [
-    # --- corporate actions -------------------------------------------------
+    # Corporate actions. Absent from both B3 exports, and each confirmed against
+    # the holdings the broker reports.
     {
         "ticker": "BBAS3",
         "date": dt.date(2024, 4, 1),
         "type": TransactionType.BONUS,
         "quantity": "200",
-        "broker": BROKERS["NU"],
-        "note": "2:1 split. Price went 56.08 (26/03/2024) -> 27.62 (06/06/2024) with "
-        "no trades in between; doubling the 200 held then reproduces your 600.",
+        "broker": "NU INVEST",
+        "note": "2:1 split. The price went 56.08 (26/03/2024) -> 27.62 (06/06/2024) with "
+        "no trades in between, and doubling the 200 held then reproduces 600.",
     },
     {
         "ticker": "ITSA4",
         "date": dt.date(2026, 6, 30),
         "type": TransactionType.BONUS,
         "quantity": "8",
-        "broker": BROKERS["NU"],
-        "note": "Bonificação. Trades account for 1,092 of the 1,100 you hold.",
+        "broker": "NU INVEST",
+        "note": "Bonificação. Trades account for 1,092 of the 1,100 held.",
     },
-    # --- holdings that predate the export ----------------------------------
-    # Each of these sits at a broker where the position later closed, so the
-    # price cannot affect today's average — verified by folding at 0.01, 10 and
-    # 100 and getting the same answer. It WILL matter for realised gains, so
-    # Phase 4 should replace these with the real figures.
-    {
-        "ticker": "BBSE3",
-        "date": dt.date(2019, 1, 1),
-        "type": TransactionType.BUY,
-        "quantity": "70",
-        "unit_price": "22.21",
-        "broker": BROKERS["RICO"],
-        "note": "Held at Rico before B3's data begins (2019-11-08); sold 23/03/2020.",
-    },
-    {
-        "ticker": "ITSA4",
-        "date": dt.date(2019, 1, 1),
-        "type": TransactionType.BUY,
-        "quantity": "100",
-        "unit_price": "13.06",
-        "broker": BROKERS["RICO"],
-        "note": "Held at Rico before B3's data begins; sold 03/07/2020.",
-    },
-    {
-        "ticker": "PRIO3",
-        "date": dt.date(2019, 1, 1),
-        "type": TransactionType.BUY,
-        "quantity": "100",
-        "unit_price": "16.70",
-        "broker": BROKERS["INTER"],
-        "note": "Held at Inter before B3's data begins; sold 12/06/2020.",
-    },
-    {
-        "ticker": "VALE3",
-        "date": dt.date(2019, 1, 1),
-        "type": TransactionType.BUY,
-        "quantity": "37",
-        "unit_price": "78.00",
-        "broker": BROKERS["BTG"],
-        "note": "Held at BTG before B3's data begins; position closed there.",
-    },
-    # --- no trades at all ---------------------------------------------------
     {
         "ticker": "AXIA3",
         "date": dt.date(2026, 3, 1),
         "type": TransactionType.BUY,
         "quantity": "220",
         "unit_price": "40.54",
-        "broker": BROKERS["NU"],
-        "note": "Came from the Eletrobras restructuring, which appears in neither "
+        "broker": "NU INVEST",
+        "note": "Arrived through the Eletrobras restructuring, which appears in neither "
         "export. Quantity and average taken from the Nu Invest statement.",
     },
 ]
+"""Everything else comes straight from the B3 file.
+
+There were seven of these. Four were opening balances at a guessed price, needed
+only so the fold could survive sales of shares bought before B3's data begins —
+`current_position` treats a short position as a reset, which makes them
+unnecessary. What is left are three real events, none of them invented.
+"""
 
 EXPECTED = {
     "AXIA3": 220,
@@ -229,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     mismatches = []
     for ticker in sorted(EXPECTED):
         try:
-            position = build_position(ticker, by_ticker.get(ticker, []))
+            position = current_position(ticker, by_ticker.get(ticker, []))
         except LedgerError as exc:
             mismatches.append(f"{ticker}: {exc}")
             print(f"{ticker:<9}  LEDGER ERROR")

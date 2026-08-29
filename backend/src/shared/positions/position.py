@@ -41,6 +41,48 @@ def _tidy(quantity: Decimal) -> Decimal:
     return trimmed.quantize(Decimal(1)) if trimmed == trimmed.to_integral_value() else trimmed
 
 
+def since_last_flat(transactions: Sequence[Transaction]) -> list[Transaction]:
+    """Drop everything up to the last point the holding was flat or short.
+
+    What you own today depends only on trades since the position last went to
+    zero. BPAC11 closed twice — in 2020 and again in 2024 — and the 100 shares
+    held now are a single purchase in August 2026, so nothing before it can move
+    the average.
+
+    "Or short" matters as much as "or zero": B3's export begins in November 2019,
+    so a position opened earlier shows up as a sale of shares that were never
+    bought. Treating that dip below zero as a reset is what lets the real trades
+    stand on their own instead of being propped up by an invented opening
+    balance at a price nobody knows.
+
+    The history is kept in the ledger either way — this only decides where the
+    fold starts.
+    """
+    ordered = sorted(transactions, key=lambda t: (t.date, t.sequence, t.id))
+    running = Decimal(0)
+    start = 0
+    for index, transaction in enumerate(ordered):
+        if transaction.type is TransactionType.SELL:
+            running -= transaction.quantity
+        else:
+            running += transaction.quantity
+        if running <= 0:
+            running = Decimal(0)
+            start = index + 1
+    return ordered[start:]
+
+
+def current_position(ticker: str, transactions: Sequence[Transaction]) -> Position | None:
+    """Today's position, folding only what still bears on it.
+
+    `build_position` stays strict — it refuses a ledger describing something
+    impossible, which is how genuine gaps get noticed. This is the reading used
+    for display, where a closed episode from six years ago is simply not part of
+    the answer.
+    """
+    return build_position(ticker, since_last_flat(transactions))
+
+
 class LedgerError(ValueError):
     """The ledger cannot be folded — it describes something impossible."""
 

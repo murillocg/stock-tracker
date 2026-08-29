@@ -8,7 +8,12 @@ from pydantic import ValidationError
 
 from shared.models import Currency
 from shared.models.transaction import Transaction, TransactionType
-from shared.positions import LedgerError, build_position
+from shared.positions import (
+    LedgerError,
+    build_position,
+    current_position,
+    since_last_flat,
+)
 
 
 def trade(
@@ -276,3 +281,53 @@ def test_sequence_beats_the_id_when_both_disagree() -> None:
 
     assert position is not None
     assert position.average_price == Decimal("20.00")
+
+
+# --- current position vs the whole ledger ------------------------------------
+
+
+def test_a_closed_and_reopened_position_forgets_the_old_average() -> None:
+    """BPAC11 closed in 2020 and again in 2024; today's 100 shares are one
+    purchase in 2026, so nothing before it can move the average."""
+    ledger = [
+        trade(1, BUY, "100", "25.64"),
+        trade(2, SELL, "100", "81.20"),  # flat
+        trade(3, BUY, "100", "50.04"),
+    ]
+
+    assert current_position("BPAC11", ledger).average_price == Decimal("50.04")
+    assert build_position("BPAC11", ledger).average_price == Decimal("50.04")
+
+
+def test_a_short_excursion_also_resets() -> None:
+    """B3's export starts in 2019, so a position opened earlier shows up as a
+    sale of shares never bought. Treating that as a reset is what removes the
+    need for an opening balance at a price nobody knows."""
+    ledger = [
+        trade(1, BUY, "100", "22.28"),
+        trade(2, SELL, "170", "22.21"),  # short by 70 — bought before the data
+        trade(3, BUY, "100", "32.25"),
+        trade(4, BUY, "100", "34.15"),
+    ]
+
+    position = current_position("BBSE3", ledger)
+
+    assert position is not None
+    assert position.quantity == Decimal("200")
+    assert position.average_price == Decimal("33.20")
+
+
+def test_the_strict_fold_still_refuses_an_impossible_ledger() -> None:
+    """`build_position` stays strict — that is how genuine gaps get noticed."""
+    ledger = [trade(1, BUY, "100", "22.28"), trade(2, SELL, "170", "22.21")]
+
+    with pytest.raises(LedgerError):
+        build_position("BBSE3", ledger)
+
+
+def test_trimming_keeps_the_ledger_intact() -> None:
+    """Only the fold starts later; nothing is deleted."""
+    ledger = [trade(1, BUY, "100", "10"), trade(2, SELL, "100", "20"), trade(3, BUY, "50", "30")]
+
+    assert len(since_last_flat(ledger)) == 1
+    assert len(ledger) == 3
