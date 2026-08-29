@@ -11,10 +11,14 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
+# Lambda build artefacts (regenerate with backend/scripts/build_lambda.sh)
+backend/build/
+
 # Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
+# terraform.tfvars holds API tokens. The .example file is not matched by this.
 *.tfvars
 
 # Angular / Node
