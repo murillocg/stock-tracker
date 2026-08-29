@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
 import { bySignal, listStocks, type StockView } from '@/api'
-import { CATEGORY_LABEL } from '@/labels'
 import CheckChips from '@/components/CheckChips.vue'
+import CategoryLabel from '@/components/CategoryLabel.vue'
 import SignalDot from '@/components/SignalDot.vue'
 
 type Tab = 'PORTFOLIO' | 'WATCHLIST'
@@ -55,12 +55,11 @@ const collected = computed(() => sorted.value.find((s) => s.current)?.current?.d
           <SignalDot :signal="stock.evaluation.signal" />
           <span class="ticker">{{ stock.ticker }}</span>
           <span class="name">{{ stock.name }}</span>
+          <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
           <span v-if="stock.current" class="price">
             {{ stock.currency === 'BRL' ? 'R$' : '$' }} {{ stock.current.price }}
           </span>
-          <span class="tag">
-            {{ stock.category ? CATEGORY_LABEL[stock.category] : 'unclassified' }}
-          </span>
+          <CategoryLabel :category="stock.category" />
         </div>
         <CheckChips :checks="stock.evaluation.checks" />
       </article>

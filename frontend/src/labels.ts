@@ -18,3 +18,13 @@ export const CATEGORY_LABEL: Record<LynchCategory, string> = {
   TURNAROUND: 'Turnaround',
   ASSET_PLAY: 'Asset play',
 }
+
+/** What each category is actually judged on — the reason the label matters. */
+export const CATEGORY_BASIS: Record<LynchCategory, string> = {
+  FAST_GROWER: 'Judged on PEG and earnings growth.',
+  STALWART: 'Judged on P/E, ROE and leverage.',
+  SLOW_GROWER: 'Judged on dividend yield and payout ratio.',
+  CYCLICAL: 'Judged on P/B — P/E misleads across a cycle. Flagged, never decided.',
+  TURNAROUND: 'Judged on debt and margins. Flagged, never decided.',
+  ASSET_PLAY: 'Judged on P/B against real assets.',
+}

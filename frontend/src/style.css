@@ -83,6 +83,23 @@ a .card:hover { border-color: var(--border-strong); box-shadow: 0 2px 6px rgba(1
   border: 1px solid var(--border); background: #fafbfc;
   color: var(--muted); white-space: nowrap;
 }
+/* Sector: what the company does. Neutral and quiet — it groups at a glance
+   without competing with the signal dot for attention. */
+.sector {
+  font-size: .74rem; color: var(--muted); white-space: nowrap;
+  background: #eef1f5; border-radius: 5px; padding: .18rem .45rem;
+}
+
+/* Lynch category: deliberately NOT colour-coded. Green, yellow and red already
+   mean something specific here, and a green "Fast grower" pill beside a red
+   signal dot would read as a contradiction. */
+.category {
+  font-size: .74rem; color: #35507a; white-space: nowrap; font-weight: 500;
+  background: #eaf0f9; border: 1px solid #d7e2f2;
+  border-radius: 999px; padding: .18rem .55rem;
+}
+.category.is-unset { color: var(--muted); background: #f1f2f4; border-color: var(--border); }
+
 .tag { font-size: .72rem; color: var(--muted); text-transform: uppercase;
        letter-spacing: .06em; }
 
