@@ -1,7 +1,8 @@
-name: CI
+name: CI/CD
 
-# One workflow. The checks run on every push and pull request; the deploy job is
-# gated to a manual run, and is the only job that can reach AWS.
+# One pipeline: integration on every push, delivery on demand. The checks run on
+# every push and pull request; the deploy job is gated to a manual run and is the
+# only job that can reach AWS.
 on:
   push:
   pull_request:
