@@ -424,3 +424,49 @@ def test_leverage_is_expressed_in_multiples() -> None:
 
     assert "4.5x" in leverage.explanation
     assert "3x" in leverage.explanation
+
+
+# --- P/E is not comparable across markets ------------------------------------
+
+
+def test_the_same_pe_reads_differently_in_brazil_and_the_us() -> None:
+    """A multiple is 1/(discount rate - growth), and the risk-free rate differs.
+
+    Brazil's Selic runs double digits against ~4% US Treasuries, which compresses
+    every Brazilian multiple. Judging both against one band would flatter the
+    Brazilian half and mark the US half expensive.
+    """
+    snapshot = build_snapshot(pe=Decimal("28.64"), roe=Decimal("34"))
+
+    brazilian = evaluate(build_stock(LynchCategory.STALWART, market=Market.B3), snapshot)
+    american = evaluate(build_stock(LynchCategory.STALWART, market=Market.NASDAQ), snapshot)
+
+    assert signals_by_name(brazilian)["P/E"] is Signal.RED
+    assert signals_by_name(american)["P/E"] is Signal.YELLOW
+
+
+def test_a_cheap_brazilian_multiple_is_still_green() -> None:
+    """BBDC3 at 6.55 is genuinely cheap, not merely cheap-looking."""
+    snapshot = build_snapshot(pe=Decimal("6.55"), roe=Decimal("20"))
+
+    evaluation = evaluate(build_stock(LynchCategory.STALWART, market=Market.B3), snapshot)
+
+    assert signals_by_name(evaluation)["P/E"] is Signal.GREEN
+
+
+def test_nyse_and_nasdaq_share_a_band() -> None:
+    """TSM is NYSE and MSFT is NASDAQ, but the risk environment is the same."""
+    snapshot = build_snapshot(pe=Decimal("31.14"), roe=Decimal("40"))
+
+    nyse = evaluate(build_stock(LynchCategory.STALWART, market=Market.NYSE), snapshot)
+    nasdaq = evaluate(build_stock(LynchCategory.STALWART, market=Market.NASDAQ), snapshot)
+
+    assert signals_by_name(nyse)["P/E"] is signals_by_name(nasdaq)["P/E"]
+
+
+def test_every_market_has_a_band() -> None:
+    """A market added without one would silently inherit a limit nobody chose."""
+    from shared.categories.rules import stalwart_pe_band
+
+    for market in Market:
+        assert stalwart_pe_band(market) is not None

@@ -9,7 +9,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from shared.categories.signals import Check, Signal
-from shared.models import DailySnapshot
+from shared.models import DailySnapshot, Market
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +30,33 @@ PEG_BAND = Band(green=Decimal("1"), yellow=Decimal("1.5"))
 GROWTH_BAND = Band(green=Decimal("20"), yellow=Decimal("10"), lower_is_better=False)
 
 # --- STALWART: pay a fair price for steady quality ----------------------------
-STALWART_PE_BAND = Band(green=Decimal("15"), yellow=Decimal("25"))
+STALWART_PE_BANDS: dict[Market, Band] = {
+    Market.B3: Band(green=Decimal("15"), yellow=Decimal("25")),
+    Market.NYSE: Band(green=Decimal("25"), yellow=Decimal("35")),
+    Market.NASDAQ: Band(green=Decimal("25"), yellow=Decimal("35")),
+}
+"""P/E limits per market, because a multiple is not comparable across them.
+
+A P/E is roughly 1 / (discount rate - growth), and the discount rate is set by
+the local risk-free rate. Brazil's Selic runs in double digits; US Treasuries are
+around 4%. That one input compresses every Brazilian multiple, which is why
+BBDC3 at 6.55 is genuinely cheap while MSFT at 28.64 is unremarkable.
+
+Judging both against a single band would mark half the US portfolio as expensive
+and flatter the Brazilian half, in a way that looks like analysis but is really
+just a currency of measurement error.
+"""
+
+DEFAULT_PE_BAND = STALWART_PE_BANDS[Market.B3]
+"""Used if a market is ever added without its own band. Deliberately the
+stricter one: a new market silently inheriting a lenient limit would be worse
+than one that reads as too harsh and gets noticed."""
+
+
+def stalwart_pe_band(market: Market) -> Band:
+    return STALWART_PE_BANDS.get(market, DEFAULT_PE_BAND)
+
+
 STALWART_ROE_BAND = Band(green=Decimal("15"), yellow=Decimal("10"), lower_is_better=False)
 LEVERAGE_BAND = Band(green=Decimal("2"), yellow=Decimal("3"))
 

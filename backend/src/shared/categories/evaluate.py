@@ -13,7 +13,6 @@ from shared.categories.rules import (
     DIVIDEND_YIELD_BAND,
     GROWTH_BAND,
     PEG_BAND,
-    STALWART_PE_BAND,
     STALWART_ROE_BAND,
     Band,
     Earnings,
@@ -21,6 +20,7 @@ from shared.categories.rules import (
     earnings_status,
     leverage_check,
     payout_check,
+    stalwart_pe_band,
 )
 from shared.categories.signals import Check, Evaluation, Signal, worst
 from shared.indicators import peg
@@ -92,9 +92,10 @@ def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
         check(
             "P/E",
             snapshot.pe,
-            STALWART_PE_BAND,
+            stalwart_pe_band(stock.market),
             "A stalwart is bought for steady compounding, so overpaying for it "
-            "spends years of that return up front.",
+            "spends years of that return up front. The limit follows the market: "
+            "a lower risk-free rate supports a higher multiple.",
         ),
         check(
             "ROE",
