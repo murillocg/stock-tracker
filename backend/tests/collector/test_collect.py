@@ -21,6 +21,8 @@ from shared.models import (
 )
 from shared.providers import (
     AuthenticationError,
+    FeatureUnavailableError,
+    ProviderFundamentals,
     ProviderQuote,
     ProviderUnavailableError,
     QuoteProvider,
@@ -54,6 +56,45 @@ class StubProvider:
         return answer
 
 
+class StubFundamentalsProvider:
+    """A `FundamentalsProvider` that answers from a script.
+
+    A separate stub for a separate Protocol — and note it is a different class
+    from `StubProvider` with no common base, which is exactly how the two real
+    providers relate.
+    """
+
+    def __init__(self, answers: dict[str, ProviderFundamentals | Exception]) -> None:
+        self._answers = answers
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> ProviderName:
+        return ProviderName.BOLSAI
+
+    def fetch_fundamentals(self, ticker: str) -> ProviderFundamentals:
+        self.calls.append(ticker)
+        answer = self._answers[ticker]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+def build_fundamentals(ticker: str, **overrides: object) -> ProviderFundamentals:
+    payload: dict[str, object] = {
+        "ticker": ticker,
+        "reference_date": dt.date(2026, 6, 30),
+        "pe": Decimal("4.05"),
+        "pb": Decimal("1.14"),
+        "roe": Decimal("28.26"),
+        "roic": Decimal("19.72"),
+        "net_debt_to_ebitda": Decimal("1.12"),
+        "earnings_cagr_5y": Decimal("77.68"),
+        **overrides,
+    }
+    return ProviderFundamentals.model_validate(payload)
+
+
 def build_quote(ticker: str, price: str, pe: str | None = None) -> ProviderQuote:
     return ProviderQuote(
         ticker=ticker,
@@ -62,13 +103,18 @@ def build_quote(ticker: str, price: str, pe: str | None = None) -> ProviderQuote
     )
 
 
-def build_stock(ticker: str, list_type: ListType = ListType.PORTFOLIO) -> Stock:
+def build_stock(
+    ticker: str,
+    list_type: ListType = ListType.PORTFOLIO,
+    fundamentals_provider: ProviderName | None = None,
+) -> Stock:
     return Stock(
         ticker=ticker,
         name=f"{ticker} SA",
         market=Market.B3,
         currency=Currency.BRL,
-        provider=ProviderName.BRAPI,
+        quote_provider=ProviderName.BRAPI,
+        fundamentals_provider=fundamentals_provider,
         list_type=list_type,
     )
 
@@ -89,13 +135,15 @@ def run(
     stocks: InMemoryStockRepository,
     snapshots: InMemorySnapshotRepository,
     provider: StubProvider,
+    fundamentals: StubFundamentalsProvider | None = None,
     **kwargs: object,
 ) -> CollectionReport:
     """Drive a whole run with no sleeping and no AWS."""
     return collect_all(
         stocks=stocks,
         snapshots=snapshots,
-        registry={ProviderName.BRAPI: provider},
+        quote_registry={ProviderName.BRAPI: provider},
+        fundamentals_registry=({} if fundamentals is None else {ProviderName.BOLSAI: fundamentals}),
         as_of=AS_OF,
         delay_seconds=1.0,
         sleep=lambda _seconds: None,
@@ -114,7 +162,11 @@ def test_a_collected_snapshot_carries_the_fetched_indicators() -> None:
     provider = StubProvider({"PETR4": build_quote("PETR4", "38.5", pe="4.5")})
 
     snapshot = collect_one(
-        build_stock("PETR4"), provider=provider, snapshots=snapshots, as_of=AS_OF
+        build_stock("PETR4"),
+        quotes=provider,
+        fundamentals=None,
+        snapshots=snapshots,
+        as_of=AS_OF,
     )
 
     assert snapshot.date == AS_OF
@@ -127,7 +179,11 @@ def test_collect_one_computes_changes_from_history() -> None:
     provider = StubProvider({"PETR4": build_quote("PETR4", "40")})
 
     snapshot = collect_one(
-        build_stock("PETR4"), provider=provider, snapshots=snapshots, as_of=AS_OF
+        build_stock("PETR4"),
+        quotes=provider,
+        fundamentals=None,
+        snapshots=snapshots,
+        as_of=AS_OF,
     )
 
     assert snapshot.change_1m == Decimal("-20.00")
@@ -140,7 +196,8 @@ def test_derived_ratios_stay_empty_until_we_fetch_statements() -> None:
 
     snapshot = collect_one(
         build_stock("PETR4"),
-        provider=provider,
+        quotes=provider,
+        fundamentals=None,
         snapshots=InMemorySnapshotRepository(),
         as_of=AS_OF,
     )
@@ -304,9 +361,125 @@ def test_rejected_credentials_abort_the_whole_run() -> None:
     assert provider.calls == ["AAAA3"]
 
 
+def test_both_sources_land_in_one_snapshot() -> None:
+    stocks = InMemoryStockRepository(
+        [build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI)]
+    )
+    snapshots = InMemorySnapshotRepository()
+
+    run(
+        stocks=stocks,
+        snapshots=snapshots,
+        provider=StubProvider({"PETR4": build_quote("PETR4", "43.55", pe="4.21")}),
+        fundamentals=StubFundamentalsProvider({"PETR4": build_fundamentals("PETR4")}),
+    )
+
+    stored = snapshots.get("PETR4", AS_OF)
+
+    assert stored is not None
+    assert stored.price == Decimal("43.55")
+    assert stored.roe == Decimal("28.26")
+    assert stored.roic == Decimal("19.72")
+    assert stored.reference_date == dt.date(2026, 6, 30)
+
+
+def test_the_quotes_pe_wins_over_the_fundamentals_pe() -> None:
+    """Both supply P/E. The quote's uses today's price; bolsai's is quarter-end."""
+    snapshot = collect_one(
+        build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI),
+        quotes=StubProvider({"PETR4": build_quote("PETR4", "43.55", pe="4.21")}),
+        fundamentals=build_fundamentals("PETR4", pe=Decimal("4.05")),
+        snapshots=InMemorySnapshotRepository(),
+        as_of=AS_OF,
+    )
+
+    assert snapshot.pe == Decimal("4.21")
+
+
+def test_an_empty_quote_field_does_not_erase_the_fundamentals() -> None:
+    """The quote carries nine mostly-empty indicator fields; they must not win."""
+    snapshot = collect_one(
+        build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI),
+        quotes=StubProvider({"PETR4": build_quote("PETR4", "43.55")}),
+        fundamentals=build_fundamentals("PETR4"),
+        snapshots=InMemorySnapshotRepository(),
+        as_of=AS_OF,
+    )
+
+    assert snapshot.pe == Decimal("4.05")
+    assert snapshot.pb == Decimal("1.14")
+
+
+def test_a_stock_without_a_fundamentals_provider_is_price_only() -> None:
+    """Correct for the USDBRL FX rate and for US tickers until that provider exists."""
+    fundamentals = StubFundamentalsProvider({})
+
+    report = run(
+        stocks=InMemoryStockRepository([build_stock("USDBRL")]),
+        snapshots=InMemorySnapshotRepository(),
+        provider=StubProvider({"USDBRL": build_quote("USDBRL", "5.42")}),
+        fundamentals=fundamentals,
+    )
+
+    assert fundamentals.calls == []
+    assert report.summary[TickerOutcome.COLLECTED] == 1
+    assert report.summary[TickerOutcome.PARTIAL] == 0
+
+
+def test_failing_fundamentals_still_stores_the_price() -> None:
+    """Fundamentals move quarterly; the price is what the drop alert watches."""
+    snapshots = InMemorySnapshotRepository()
+
+    report = run(
+        stocks=InMemoryStockRepository(
+            [build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI)]
+        ),
+        snapshots=snapshots,
+        provider=StubProvider({"PETR4": build_quote("PETR4", "43.55")}),
+        fundamentals=StubFundamentalsProvider(
+            {"PETR4": ProviderUnavailableError("bolsai quota exhausted")}
+        ),
+    )
+
+    stored = snapshots.get("PETR4", AS_OF)
+
+    assert report.summary[TickerOutcome.PARTIAL] == 1
+    assert stored is not None
+    assert stored.price == Decimal("43.55")
+    assert stored.roe is None
+
+
+def test_a_gated_fundamentals_endpoint_does_not_abort_the_run() -> None:
+    """403 means our plan lacks the feature, not that the key is bad."""
+    report = run(
+        stocks=InMemoryStockRepository(
+            [build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI)]
+        ),
+        snapshots=InMemorySnapshotRepository(),
+        provider=StubProvider({"PETR4": build_quote("PETR4", "43.55")}),
+        fundamentals=StubFundamentalsProvider(
+            {"PETR4": FeatureUnavailableError("Pro tier required")}
+        ),
+    )
+
+    assert report.summary[TickerOutcome.PARTIAL] == 1
+
+
+def test_a_dead_fundamentals_key_still_aborts_the_run() -> None:
+    with pytest.raises(AuthenticationError):
+        run(
+            stocks=InMemoryStockRepository(
+                [build_stock("PETR4", fundamentals_provider=ProviderName.BOLSAI)]
+            ),
+            snapshots=InMemorySnapshotRepository(),
+            provider=StubProvider({"PETR4": build_quote("PETR4", "43.55")}),
+            fundamentals=StubFundamentalsProvider({"PETR4": AuthenticationError("bad api key")}),
+        )
+
+
 def test_an_unimplemented_provider_is_reported_not_raised() -> None:
     stock = build_stock("AAPL").model_copy(
-        update={"provider": ProviderName.ALPHA_VANTAGE, "market": Market.NASDAQ}
+        update={"quote_provider": ProviderName.ALPHA_VANTAGE, "market": Market.NASDAQ}
     )
 
     report = run(
@@ -326,11 +499,12 @@ def test_collection_pauses_between_upstream_calls() -> None:
     collect_all(
         stocks=stocks,
         snapshots=InMemorySnapshotRepository(),
-        registry={
+        quote_registry={
             ProviderName.BRAPI: StubProvider(
                 {"PETR4": build_quote("PETR4", "38.5"), "VALE3": build_quote("VALE3", "60")}
             )
         },
+        fundamentals_registry={},
         as_of=AS_OF,
         delay_seconds=1.5,
         sleep=slept.append,
@@ -347,7 +521,8 @@ def test_a_skipped_ticker_costs_no_delay() -> None:
     collect_all(
         stocks=InMemoryStockRepository([build_stock("PETR4"), build_stock("VALE3")]),
         snapshots=InMemorySnapshotRepository([existing]),
-        registry={ProviderName.BRAPI: StubProvider({"VALE3": build_quote("VALE3", "60")})},
+        quote_registry={ProviderName.BRAPI: StubProvider({"VALE3": build_quote("VALE3", "60")})},
+        fundamentals_registry={},
         as_of=AS_OF,
         delay_seconds=1.5,
         sleep=slept.append,

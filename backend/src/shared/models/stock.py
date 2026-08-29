@@ -16,8 +16,17 @@ class Stock(CamelModel):
     name: str
     market: Market
     currency: Currency
-    provider: ProviderName
-    """Which API supplies this ticker's FETCH step — B3 and US differ."""
+    quote_provider: ProviderName
+    """Which API supplies the daily price. B3 and US differ."""
+
+    fundamentals_provider: ProviderName | None = None
+    """Which API supplies the statement indicators, if any.
+
+    Optional and separate from `quote_provider` because no single free source
+    covers both: brapi has prices and no fundamentals, bolsai the reverse. `None`
+    means price-only collection — correct for the `USDBRL` FX rate, and for US
+    tickers until that provider exists.
+    """
 
     sector: str | None = None
     category: LynchCategory | None = None

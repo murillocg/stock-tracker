@@ -147,14 +147,15 @@ def report_snapshot(provider: BrapiProvider, ticker: str) -> None:
         name=ticker,
         market=Market.B3,
         currency=Currency.BRL,
-        provider=ProviderName.BRAPI,
+        quote_provider=ProviderName.BRAPI,
         list_type=ListType.PORTFOLIO,
     )
     # Empty history, so the change fields stay absent — there is nothing to
     # compare against on a first run. That is the correct behaviour, not a bug.
     snapshot = collect_one(
         stock,
-        provider=provider,
+        quotes=provider,
+        fundamentals=None,
         snapshots=InMemorySnapshotRepository(),
         as_of=dt.date.today(),
     )

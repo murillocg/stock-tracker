@@ -22,12 +22,15 @@ from shared.indicators import apply_changes, compute_changes
 from shared.models import CamelModel, DailySnapshot, ListType, ProviderName, Stock
 from shared.providers import (
     AuthenticationError,
+    FundamentalsProvider,
     ProviderError,
+    ProviderFundamentals,
+    ProviderQuote,
     QuoteProvider,
     TickerNotFoundError,
     get_provider,
 )
-from shared.providers.factory import build_quote_registry
+from shared.providers.factory import build_fundamentals_registry, build_quote_registry
 from shared.repository import (
     DynamoDbSnapshotRepository,
     DynamoDbStockRepository,
@@ -53,6 +56,9 @@ class TickerOutcome(StrEnum):
     """What happened to one ticker. Every run reports one of these per stock."""
 
     COLLECTED = "COLLECTED"
+    PARTIAL = "PARTIAL"
+    """Price stored, fundamentals unavailable. Usable, but worth noticing."""
+
     SKIPPED = "SKIPPED"
     """Already collected for this date — a retry must not re-spend API quota."""
 
@@ -90,21 +96,72 @@ class CollectionReport(CamelModel):
         return {outcome.value: count for outcome, count in counts.items()}
 
 
+def fetch_fundamentals(
+    stock: Stock,
+    registry: Mapping[ProviderName, FundamentalsProvider],
+) -> ProviderFundamentals | None:
+    """Fundamentals for one stock, or `None` if unavailable.
+
+    Deliberately forgiving: fundamentals move once a quarter, so yesterday's are
+    almost always still true, and losing them must not cost us today's price —
+    the thing the drop alert actually watches. A failure here degrades the
+    snapshot instead of failing it.
+
+    `AuthenticationError` is the exception to that, and is re-raised: a dead key
+    means every remaining ticker fails identically.
+    """
+    if stock.fundamentals_provider is None:
+        return None
+    try:
+        provider = get_provider(registry, stock.fundamentals_provider)
+        return provider.fetch_fundamentals(stock.ticker)
+    except AuthenticationError:
+        raise
+    except ProviderError as exc:
+        logger.warning("No fundamentals for %s: %s", stock.ticker, exc)
+        return None
+
+
+def merge(quote: ProviderQuote, fundamentals: ProviderFundamentals | None) -> dict[str, Any]:
+    """Combine both sources into one set of snapshot values.
+
+    Fundamentals go down first, then the quote overwrites with whatever it
+    actually has. Only the quote's non-`None` values are applied, otherwise its
+    empty fields would wipe out bolsai's data.
+
+    That ordering settles the one field both supply: `pe`. The quote's is
+    computed against *today's* price, bolsai's against the quarter-end close, so
+    the quote wins. Note the corollary — bolsai's other price-based ratios (`pb`,
+    `ev_ebitda`) are still as of `reference_date`, not today.
+    """
+    values: dict[str, Any] = {}
+    if fundamentals is not None:
+        values.update(fundamentals.model_dump(exclude={"ticker"}))
+    values.update(
+        {
+            field: value
+            for field, value in quote.model_dump(exclude={"ticker"}).items()
+            if value is not None
+        }
+    )
+    return values
+
+
 def collect_one(
     stock: Stock,
     *,
-    provider: QuoteProvider,
+    quotes: QuoteProvider,
+    fundamentals: ProviderFundamentals | None,
     snapshots: SnapshotRepository,
     as_of: dt.date,
 ) -> DailySnapshot:
     """FETCH then COMPUTE for a single stock. Does not persist anything.
 
-    The derived ratios (roic, payout, peg, growth) stay `None` for now: they need
-    figures from the financial statements, and no provider we have implemented
-    returns those yet. The changes are computed here because they come from our
-    own history, which we do have.
+    `payout_ratio` and `dividend_yield` stay `None`: no free source supplies
+    dividends paid. `peg` is left for the category rulesets, which decide whether
+    a 5-year CAGR is the right denominator for the stock in question.
     """
-    quote = provider.fetch_quote(stock.ticker)
+    quote = quotes.fetch_quote(stock.ticker)
 
     history = snapshots.history(
         stock.ticker,
@@ -113,13 +170,8 @@ def collect_one(
     )
     changes = compute_changes(history, as_of=as_of, current_price=quote.price)
 
-    # `**` splats the dict into keyword arguments — the FETCH indicators carry
-    # across without naming all nine. `ticker` and `date` are set explicitly
-    # because the snapshot is keyed on them.
-    snapshot = DailySnapshot(
-        ticker=stock.ticker,
-        date=as_of,
-        **quote.model_dump(exclude={"ticker"}),
+    snapshot = DailySnapshot.model_validate(
+        {"ticker": stock.ticker, "date": as_of, **merge(quote, fundamentals)}
     )
     return apply_changes(snapshot, changes)
 
@@ -144,7 +196,8 @@ def collect_all(
     *,
     stocks: StockRepository,
     snapshots: SnapshotRepository,
-    registry: Mapping[ProviderName, QuoteProvider],
+    quote_registry: Mapping[ProviderName, QuoteProvider],
+    fundamentals_registry: Mapping[ProviderName, FundamentalsProvider],
     as_of: dt.date,
     delay_seconds: float,
     tickers: Sequence[str] | None = None,
@@ -177,9 +230,16 @@ def collect_all(
             sleep(delay_seconds)
 
         try:
-            provider = get_provider(registry, stock.provider)
+            quotes = get_provider(quote_registry, stock.quote_provider)
             called_provider = True
-            snapshot = collect_one(stock, provider=provider, snapshots=snapshots, as_of=as_of)
+            fundamentals = fetch_fundamentals(stock, fundamentals_registry)
+            snapshot = collect_one(
+                stock,
+                quotes=quotes,
+                fundamentals=fundamentals,
+                snapshots=snapshots,
+                as_of=as_of,
+            )
         except AuthenticationError:
             # Listed first because it is a subclass of ProviderError and `except`
             # clauses are tried in order — the generic handler below would
@@ -187,7 +247,7 @@ def collect_all(
             logger.error("Provider credentials rejected — aborting the run at %s", stock.ticker)
             raise
         except TickerNotFoundError as exc:
-            logger.warning("Ticker %s unknown to %s: %s", stock.ticker, stock.provider, exc)
+            logger.warning("Ticker %s unknown to %s: %s", stock.ticker, stock.quote_provider, exc)
             results.append(
                 TickerResult(ticker=stock.ticker, outcome=TickerOutcome.NOT_FOUND, detail=str(exc))
             )
@@ -203,7 +263,14 @@ def collect_all(
         # Denormalise onto the registry item so the frontend renders the whole
         # portfolio from one GSI query.
         stocks.save(stock.model_copy(update={"current": snapshot}))
-        results.append(TickerResult(ticker=stock.ticker, outcome=TickerOutcome.COLLECTED))
+
+        wanted_fundamentals = stock.fundamentals_provider is not None
+        outcome = (
+            TickerOutcome.PARTIAL
+            if wanted_fundamentals and fundamentals is None
+            else TickerOutcome.COLLECTED
+        )
+        results.append(TickerResult(ticker=stock.ticker, outcome=outcome))
 
     report = CollectionReport(as_of=as_of, results=results)
     logger.info("Collection finished for %s: %s", as_of, report.summary)
@@ -235,7 +302,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         report = collect_all(
             stocks=stocks,
             snapshots=snapshots,
-            registry=build_quote_registry(client, config),
+            quote_registry=build_quote_registry(client, config),
+            fundamentals_registry=build_fundamentals_registry(client, config),
             as_of=as_of,
             delay_seconds=config.provider_delay_seconds,
             tickers=tickers,

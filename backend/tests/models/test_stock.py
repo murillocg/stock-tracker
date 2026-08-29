@@ -58,7 +58,7 @@ def test_an_unclassified_stock_is_allowed() -> None:
         name="Apple Inc.",
         market=Market.NASDAQ,
         currency=Currency.USD,
-        provider=ProviderName.ALPHA_VANTAGE,
+        quote_provider=ProviderName.ALPHA_VANTAGE,
         list_type=ListType.WATCHLIST,
     )
 
@@ -74,7 +74,7 @@ def test_an_unknown_enum_value_is_rejected() -> None:
             name="Petrobras",
             market="BOVESPA",  # type: ignore[arg-type]
             currency=Currency.BRL,
-            provider=ProviderName.BRAPI,
+            quote_provider=ProviderName.BRAPI,
             list_type=ListType.PORTFOLIO,
         )
 
@@ -91,7 +91,7 @@ def test_the_default_alert_map_is_not_shared_between_instances() -> None:
         name="A",
         market=Market.B3,
         currency=Currency.BRL,
-        provider=ProviderName.BRAPI,
+        quote_provider=ProviderName.BRAPI,
         list_type=ListType.WATCHLIST,
     )
     second = first.model_copy(update={"ticker": "BBB3"})

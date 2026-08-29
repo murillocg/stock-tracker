@@ -93,8 +93,9 @@ stock-tracker/
 ## Data model (DynamoDB — 2 tables)
 
 **Table `Stocks`** (registry/state): PK=`ticker`, GSI `listType`->`ticker`.
-Fields: name, market (B3/NYSE/NASDAQ), currency (BRL/USD), provider
-(BRAPI/BOLSAI/ALPHA_VANTAGE), sector, category (Lynch enum), listType
+Fields: name, market (B3/NYSE/NASDAQ), currency (BRL/USD), **quoteProvider**
+(daily price) and **fundamentalsProvider** (optional, statement indicators) — two
+fields because no free source covers both, sector, category (Lynch enum), listType
 (PORTFOLIO/WATCHLIST), alertRules (map), current (map — latest denormalized snapshot
 so the portfolio lists in a single query).
 
@@ -137,9 +138,24 @@ rate limits of the APIs. No parallelism.
 
 ## Data sources
 
-- B3: brapi.dev (price + basics, free tier) + bolsai (27 indicators incl. EV/EBITDA
-  and Net Debt/EBITDA). Confirm what's in the free tier; whatever isn't, compute from
-  the statements.
+- B3 — **verified against the live APIs, 2026-08-28:**
+  - **brapi.dev = price only.** Free plan returns `regularMarketPrice`,
+    `priceEarnings`, `earningsPerShare`, `marketCap`. All fundamentals live in the
+    `defaultKeyStatistics` / `financialData` modules, which are **Pro at
+    R$139,99/mo**. PETR4, MGLU3, VALE3 and ITUB4 answer anonymously with all
+    resources — do not draw conclusions from those four; every other ticker 401s
+    without a token.
+  - **bolsai = fundamentals.** `GET /fundamentals/{ticker}` with an `X-API-Key`
+    header, 200 req/day free. Supplies P/L, P/VP, EV/EBITDA, ROE, ROIC, Net
+    Debt/EBITDA and margins, **already as percentages** (28.26, not 0.2826) —
+    matching our own convention. Its ROIC reproduces exactly from
+    `shared.indicators.roic()` with a 34% tax rate.
+    Two traps: raw statement figures are in **thousands** of BRL while
+    `market_cap`/`close_price` are in units; and its price-based ratios are as of
+    `reference_date` (quarter end), not today.
+  - **No free source for dividends.** brapi gates them behind Pro; bolsai's
+    `/dividends` answers 403 on the free plan. `dividendYield` and `payoutRatio`
+    stay empty.
 - US: Alpha Vantage / Finnhub / yfinance (restricted free tiers).
 - FX USD/BRL: brapi or the Brazilian Central Bank.
 - **Do not scrape oceans14/statusinvest** (they block it and it violates ToS). Use APIs.
