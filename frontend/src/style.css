@@ -129,3 +129,13 @@ table.history th, table.history td {
 table.history th:first-child, table.history td:first-child { text-align: left; }
 table.history th { color: var(--muted); font-weight: 500; }
 table.history tbody tr:last-child td { border-bottom: none; }
+
+/* The "why". Quiet enough that a healthy portfolio stays scannable, present
+   enough that a red never needs a hover to explain itself. */
+.reasons { list-style: none; margin: .7rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.reasons li {
+  display: flex; gap: .5rem; align-items: baseline;
+  font-size: .8rem; line-height: 1.45; color: var(--muted);
+}
+.reasons li .dot { position: relative; top: .35rem; }
+.reasons li strong { color: var(--text); font-weight: 600; }

@@ -65,12 +65,19 @@ def fast_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
 
     ratio = peg(pe=snapshot.pe, earnings_growth=snapshot.earnings_cagr_5y)
     return [
-        check("PEG", ratio, PEG_BAND, "P/E against the 5-year earnings CAGR."),
+        check(
+            "PEG",
+            ratio,
+            PEG_BAND,
+            "Lynch's test: under 1 means you are not paying more for the company "
+            "than it is growing.",
+        ),
         check(
             "Earnings CAGR 5y",
             snapshot.earnings_cagr_5y,
             GROWTH_BAND,
-            "A fast grower has to actually be growing.",
+            "A fast grower has to actually be growing; below 10% it belongs in another category.",
+            unit="%",
         ),
     ]
 
@@ -82,8 +89,21 @@ def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
         return gate
 
     return [
-        check("P/E", snapshot.pe, STALWART_PE_BAND, "Price against trailing earnings."),
-        check("ROE", snapshot.roe, STALWART_ROE_BAND, "Return on equity."),
+        check(
+            "P/E",
+            snapshot.pe,
+            STALWART_PE_BAND,
+            "A stalwart is bought for steady compounding, so overpaying for it "
+            "spends years of that return up front.",
+        ),
+        check(
+            "ROE",
+            snapshot.roe,
+            STALWART_ROE_BAND,
+            "Return on shareholder capital. Steady returns are the whole reason to "
+            "hold a stalwart; without them it is just a large company.",
+            unit="%",
+        ),
         leverage_check(snapshot, applicable=stock.uses_operating_leverage),
     ]
 
@@ -114,7 +134,8 @@ def slow_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             "Dividend yield",
             yield_value,
             DIVIDEND_YIELD_BAND,
-            f"Yield on the current price.{provenance}",
+            "The income on today's price — the only reason to hold a slow grower." + provenance,
+            unit="%",
         ),
         payout_check(payout_value),
     ]
@@ -127,7 +148,8 @@ def asset_play(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             "P/B",
             snapshot.pb,
             ASSET_PLAY_PB_BAND,
-            "Price against book value. Under 1 is the classic asset play.",
+            "Under 1 means paying less than the assets are carried at, which is the "
+            "entire asset-play thesis.",
         )
     ]
 
@@ -144,7 +166,8 @@ def cyclical(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             "P/B",
             snapshot.pb,
             CYCLICAL_PB_BAND,
-            "Price to book. Where this sits in the historical band is the question.",
+            "Book value is the honest lens across a cycle — earnings collapse at the "
+            "bottom, which makes P/E look expensive exactly when the stock is cheapest.",
         )
     ]
 
@@ -157,7 +180,9 @@ def turnaround(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             "EBITDA margin",
             snapshot.ebitda_margin,
             Band(green=Decimal("20"), yellow=Decimal("10"), lower_is_better=False),
-            "Operating margin. The direction matters more than the level.",
+            "For a turnaround the direction matters more than the level: the thesis "
+            "is margins inflecting, which one snapshot cannot show.",
+            unit="%",
         ),
     ]
 

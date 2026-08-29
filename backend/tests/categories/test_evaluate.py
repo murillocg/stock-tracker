@@ -370,3 +370,57 @@ def test_a_negative_pe_is_still_reported_as_a_loss() -> None:
 
     assert evaluation.signal is Signal.NEEDS_REVIEW
     assert "loss-making" in evaluation.checks[0].explanation
+
+
+# --- explanations ------------------------------------------------------------
+
+
+def test_every_verdict_quotes_the_threshold_it_was_judged_by() -> None:
+    """ "Return on equity." was a definition. A traffic light owes you a reason."""
+    snapshot = build_snapshot(pe=Decimal("9.38"), roe=Decimal("7.15"))
+
+    roe = next(
+        c for c in evaluate(build_stock(LynchCategory.STALWART), snapshot).checks if c.name == "ROE"
+    )
+
+    assert "7.15%" in roe.explanation
+    assert "15%" in roe.explanation
+    assert "below" in roe.explanation
+
+
+def test_a_green_verdict_explains_itself_too() -> None:
+    snapshot = build_snapshot(pe=Decimal("9.38"), roe=Decimal("22"))
+
+    roe = next(
+        c for c in evaluate(build_stock(LynchCategory.STALWART), snapshot).checks if c.name == "ROE"
+    )
+
+    assert "22%" in roe.explanation
+    assert "at or above" in roe.explanation
+
+
+def test_the_threshold_text_follows_the_constant() -> None:
+    """Generated from the band, so a constant and its prose cannot drift apart."""
+    from shared.categories.rules import STALWART_ROE_BAND
+
+    snapshot = build_snapshot(pe=Decimal("10"), roe=Decimal("1"))
+    roe = next(
+        c for c in evaluate(build_stock(LynchCategory.STALWART), snapshot).checks if c.name == "ROE"
+    )
+
+    assert f"{STALWART_ROE_BAND.yellow}%" in roe.explanation
+
+
+def test_leverage_is_expressed_in_multiples() -> None:
+    snapshot = build_snapshot(
+        pe=Decimal("10"), roe=Decimal("20"), net_debt_to_ebitda=Decimal("4.5")
+    )
+
+    leverage = next(
+        c
+        for c in evaluate(build_stock(LynchCategory.STALWART), snapshot).checks
+        if c.name == "Net debt / EBITDA"
+    )
+
+    assert "4.5x" in leverage.explanation
+    assert "3x" in leverage.explanation

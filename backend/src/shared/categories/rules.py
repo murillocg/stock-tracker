@@ -120,17 +120,58 @@ def band_signal(value: Decimal | None, band: Band) -> Signal:
     return Signal.YELLOW if value >= band.yellow else Signal.RED
 
 
-def check(name: str, value: Decimal | None, band: Band, explanation: str) -> Check:
-    """Build a `Check`, with a fallback explanation when the input is missing."""
+def _verdict(value: Decimal, band: Band, signal: Signal, unit: str) -> str:
+    """State the number against the limit it was judged by.
+
+    Generated from the band rather than written by hand, so a threshold and the
+    sentence describing it cannot drift apart — change the constant and every
+    explanation that quotes it changes with it.
+    """
+    shown = f"{value}{unit}"
+    green, yellow = f"{band.green}{unit}", f"{band.yellow}{unit}"
+
+    if band.lower_is_better:
+        if signal is Signal.GREEN:
+            return f"{shown}, within the {green} limit."
+        if signal is Signal.YELLOW:
+            return f"{shown}, past the {green} target but still under {yellow}."
+        return f"{shown}, over the {yellow} limit."
+
+    if signal is Signal.GREEN:
+        return f"{shown}, at or above the {green} mark."
+    if signal is Signal.YELLOW:
+        return f"{shown}, short of {green} though still above {yellow}."
+    return f"{shown}, below {yellow}."
+
+
+def check(
+    name: str,
+    value: Decimal | None,
+    band: Band,
+    meaning: str,
+    *,
+    unit: str = "",
+) -> Check:
+    """Build a `Check` whose explanation answers "why is this that colour?".
+
+    `meaning` says why the indicator matters for this category; the verdict clause
+    in front of it is derived from the band. "Return on equity." was a definition,
+    not a reason — and a reason is the only thing a traffic light owes you.
+    """
     signal = band_signal(value, band)
-    if signal is Signal.INSUFFICIENT_DATA:
+    if signal is Signal.INSUFFICIENT_DATA or value is None:
         return Check(
             name=name,
             value=None,
-            signal=signal,
-            explanation=f"{name} is not available from any free data source.",
+            signal=Signal.INSUFFICIENT_DATA,
+            explanation=f"{name} is not available from any free data source for this stock.",
         )
-    return Check(name=name, value=value, signal=signal, explanation=explanation)
+    return Check(
+        name=name,
+        value=value,
+        signal=signal,
+        explanation=f"{_verdict(value, band, signal, unit)} {meaning}",
+    )
 
 
 class Earnings(StrEnum):
@@ -178,5 +219,7 @@ def leverage_check(snapshot: DailySnapshot, *, applicable: bool = True) -> Check
         "Net debt / EBITDA",
         snapshot.net_debt_to_ebitda,
         LEVERAGE_BAND,
-        "Leverage against operating cash generation.",
+        "Debt against the cash the business generates. Past 3x, one bad year turns "
+        "into a solvency question rather than a profit one.",
+        unit="x",
     )
