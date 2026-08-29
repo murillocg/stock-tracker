@@ -248,3 +248,31 @@ def test_a_trade_at_no_price_is_rejected() -> None:
             unit_price=Decimal(0),
             currency=Currency.BRL,
         )
+
+
+# --- determinism -------------------------------------------------------------
+
+
+def test_same_day_trades_fold_in_source_order_not_at_random() -> None:
+    """VALE3 has a buy and a sell on 2024-08-27, and their order changes the
+    average. Sorting by a random id gave 68.06 on some runs and 68.29 on others
+    from identical input — invisible until two runs were compared."""
+    buy = trade(1, BUY, "100", "60.00").model_copy(update={"sequence": 1, "id": "aaa"})
+    sell = trade(1, SELL, "100", "60.02").model_copy(update={"sequence": 2, "id": "zzz"})
+    opening = trade(1, BUY, "600", "70.00").model_copy(update={"sequence": 0, "id": "mmm"})
+
+    forwards = build_position("VALE3", [opening, buy, sell])
+    backwards = build_position("VALE3", [sell, buy, opening])
+
+    assert forwards == backwards
+
+
+def test_sequence_beats_the_id_when_both_disagree() -> None:
+    """The id is only a tie-break for rows carrying no sequence at all."""
+    first = trade(1, BUY, "100", "10.00").model_copy(update={"sequence": 0, "id": "zzz"})
+    second = trade(1, BUY, "100", "30.00").model_copy(update={"sequence": 1, "id": "aaa"})
+
+    position = build_position("PETR4", [second, first])
+
+    assert position is not None
+    assert position.average_price == Decimal("20.00")

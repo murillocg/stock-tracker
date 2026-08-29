@@ -73,8 +73,24 @@ class Transaction(CamelModel):
     Brazilian cost basis includes them, so Phase 4 will need it and adding the
     field now costs nothing."""
 
+    sequence: int = 0
+    """Order within the day, taken from the source file's own row order.
+
+    Without it the fold is non-deterministic: several trades can share a date,
+    and their order changes the running average. Sorting by a random id gave
+    VALE3 an average of 68.06 on some runs and 68.29 on others, from identical
+    input — a difference that would have been invisible until the numbers were
+    compared across two runs.
+    """
+
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
-    """Distinguishes trades made on the same day in the same ticker."""
+    """Distinguishes trades made on the same day in the same ticker.
+
+    Importers should derive this from the row's content rather than take the
+    random default, so that re-running an import overwrites rather than
+    duplicating — the sort key is `<date>#<id>`, and a fresh id every run means a
+    fresh row every run.
+    """
 
     note: str | None = None
 

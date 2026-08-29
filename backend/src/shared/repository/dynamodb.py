@@ -198,5 +198,5 @@ class DynamoDbTransactionRepository:
         # and removes the caller's dependence on that being true.
         return sorted(
             (Transaction.model_validate(item) for item in items),
-            key=lambda t: (t.date, t.id),
+            key=lambda t: (t.date, t.sequence, t.id),
         )

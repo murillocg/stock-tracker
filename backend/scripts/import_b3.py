@@ -13,6 +13,7 @@ broker reports, and every one is justified in ADJUSTMENTS.
 
 import argparse
 import datetime as dt
+import hashlib
 import re
 import sys
 from collections import defaultdict
@@ -146,6 +147,16 @@ def broker_of(name: object) -> str:
     return BROKERS["RICO"]
 
 
+def stable_id(ticker: str, date: dt.date, row: list[Any], index: int) -> str:
+    """A repeatable id, so re-running an import overwrites instead of duplicating.
+
+    The sort key is `<date>#<id>`. With the model's random default, every run
+    would mint new ids and write a second copy of every row.
+    """
+    material = "|".join(str(x) for x in (ticker, date, row[1], row[6], row[7], row[4], index))
+    return hashlib.sha1(material.encode()).hexdigest()[:12]
+
+
 def read_trades(path: str) -> list[Transaction]:
     sheet = openpyxl.load_workbook(path)[SHEET]
     rows = (
@@ -153,16 +164,23 @@ def read_trades(path: str) -> list[Transaction]:
         for r in range(2, sheet.max_row + 1)
     )
     trades = []
-    for row in rows:
+    for index, row in enumerate(rows):
+        ticker = normalise(row[5])
+        date = dt.datetime.strptime(str(row[0]), "%d/%m/%Y").date()
         trades.append(
             Transaction(
-                ticker=normalise(row[5]),
-                date=dt.datetime.strptime(str(row[0]), "%d/%m/%Y").date(),
+                ticker=ticker,
+                date=date,
                 type=TransactionType.BUY if row[1] == "Compra" else TransactionType.SELL,
                 quantity=Decimal(str(row[6])),
                 unit_price=Decimal(str(row[7])),
                 currency=Currency.BRL,
                 broker=broker_of(row[4]),
+                # The file's own row order. B3 lists newest first, so this
+                # descends through time — which is fine: it only ever breaks ties
+                # within a single date, and it does so consistently.
+                sequence=index,
+                id=stable_id(ticker, date, row, index),
             )
         )
     return trades
@@ -179,6 +197,10 @@ def build_adjustments() -> list[Transaction]:
             currency=Currency.BRL,
             broker=a["broker"],
             note=a["note"],
+            sequence=-1,  # adjustments settle before that day's trades
+            id=hashlib.sha1(f"adj|{a['ticker']}|{a['date']}|{a['quantity']}".encode()).hexdigest()[
+                :12
+            ],
         )
         for a in ADJUSTMENTS
     ]

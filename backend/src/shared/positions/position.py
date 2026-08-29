@@ -67,7 +67,9 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
     if not transactions:
         return None
 
-    ordered = sorted(transactions, key=lambda t: (t.date, t.id))
+    # (date, sequence) is the deterministic order; the id only breaks ties for
+    # rows that carry no sequence at all.
+    ordered = sorted(transactions, key=lambda t: (t.date, t.sequence, t.id))
     currency = ordered[0].currency
 
     quantity = Decimal(0)
