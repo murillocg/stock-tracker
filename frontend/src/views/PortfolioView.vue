@@ -55,11 +55,15 @@ const collected = computed(() => sorted.value.find((s) => s.current)?.current?.d
           <SignalDot :signal="stock.evaluation.signal" />
           <span class="ticker">{{ stock.ticker }}</span>
           <span class="name">{{ stock.name }}</span>
-          <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
-          <span v-if="stock.current" class="price">
-            {{ stock.currency === 'BRL' ? 'R$' : '$' }} {{ stock.current.price }}
+          <span class="labels">
+            <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
+            <CategoryLabel :category="stock.category" />
           </span>
-          <CategoryLabel :category="stock.category" />
+          <span v-if="stock.current" class="price">
+            <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
+            {{ stock.current.price }}
+          </span>
+          <span v-else class="price is-empty">—</span>
         </div>
         <CheckChips :checks="stock.evaluation.checks" />
       </article>

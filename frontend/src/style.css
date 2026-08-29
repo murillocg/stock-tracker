@@ -58,7 +58,22 @@ a .card:hover { border-color: var(--border-strong); box-shadow: 0 2px 6px rgba(1
 .ticker { font-weight: 600; font-size: 1rem; }
 .name { color: var(--muted); font-size: .85rem; flex: 1; min-width: 0;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.price { font-variant-numeric: tabular-nums; font-size: .95rem; }
+
+/* The two labels belong together — they both answer "what kind of thing is this".
+   Splitting them around the price left the number visually stranded between two
+   pills. */
+.labels { display: flex; align-items: center; gap: .35rem; flex: none; }
+
+/* Anchored right with a fixed width so prices form a clean column down the list,
+   which is what makes them scannable. tabular-nums keeps the digits aligned even
+   though 5.19 and 78.58 have different glyph widths. */
+.price {
+  flex: none; min-width: 7rem; text-align: right;
+  font-variant-numeric: tabular-nums; font-size: 1rem; font-weight: 600;
+}
+.price .currency { color: var(--muted); font-weight: 400; font-size: .8rem;
+                   margin-right: .15rem; }
+.price.is-empty { color: var(--unknown); font-weight: 400; }
 
 .checks { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }
 .chip {

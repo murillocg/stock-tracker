@@ -49,8 +49,14 @@ const CHANGES = [
         <div class="card-head">
           <SignalDot :signal="stock.evaluation.signal" with-label />
           <span class="name">{{ stock.name }}</span>
-          <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
-          <CategoryLabel :category="stock.category" />
+          <span class="labels">
+            <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
+            <CategoryLabel :category="stock.category" />
+          </span>
+          <span v-if="stock.current" class="price">
+            <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
+            {{ stock.current.price }}
+          </span>
         </div>
         <CheckChips :checks="stock.evaluation.checks" />
         <p v-if="stock.current?.referenceDate" class="subtle" style="margin: .8rem 0 0">
