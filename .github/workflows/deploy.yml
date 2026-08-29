@@ -12,11 +12,11 @@ on:
         type: boolean
         default: false
 
-# `id-token: write` is what lets the job mint an OIDC token. Without it the role
-# assumption fails with a confusing credentials error.
+# Deliberately narrow at the workflow level. `id-token: write` — the permission
+# that lets a job mint an OIDC token and assume the AWS role — is granted only to
+# the deploy job below, so the checks job never holds it.
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   # Terraform's lock would reject a second run anyway; failing here is clearer
@@ -25,9 +25,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The same checks CI runs, called rather than copied. Without this a deploy
+  # could ship a commit whose tests fail: `make deploy` runs `check` locally, and
+  # the workflow had no equivalent.
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: checks
     runs-on: ubuntu-latest
     environment: production
+
+    # Only this job can assume the AWS role.
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4

@@ -2,9 +2,13 @@ name: CI
 
 # Runs on everything. Needs no AWS access at all — the checks are lint, types,
 # tests and a frontend build, none of which touch the cloud.
+#
+# `workflow_call` makes this callable from deploy.yml, so the deploy runs exactly
+# these checks rather than a second copy of them that can drift.
 on:
   push:
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
