@@ -7,6 +7,7 @@ import httpx
 from shared.config import Config
 from shared.models import ProviderName
 from shared.providers.alpha_vantage import AlphaVantageProvider
+from shared.providers.banco_central import BancoCentralProvider
 from shared.providers.bolsai import BolsaiProvider
 from shared.providers.brapi import BrapiProvider
 from shared.providers.errors import ProviderError
@@ -31,6 +32,7 @@ def build_quote_registry(client: httpx.Client, config: Config) -> dict[ProviderN
     return {
         ProviderName.BRAPI: BrapiProvider(client, config.brapi_token),
         ProviderName.ALPHA_VANTAGE: AlphaVantageProvider(client, config.alpha_vantage_api_key),
+        ProviderName.BANCO_CENTRAL: BancoCentralProvider(client),
     }
 
 

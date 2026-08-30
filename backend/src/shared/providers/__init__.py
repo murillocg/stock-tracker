@@ -7,6 +7,7 @@ Two narrow capabilities, deliberately not merged into one interface:
 """
 
 from shared.providers.alpha_vantage import AlphaVantageProvider
+from shared.providers.banco_central import BancoCentralProvider
 from shared.providers.bolsai import BolsaiProvider
 from shared.providers.brapi import BrapiProvider
 from shared.providers.errors import (
@@ -30,6 +31,7 @@ from shared.providers.quote import ProviderQuote
 __all__ = [
     "AlphaVantageProvider",
     "AuthenticationError",
+    "BancoCentralProvider",
     "BolsaiProvider",
     "BrapiProvider",
     "FeatureUnavailableError",

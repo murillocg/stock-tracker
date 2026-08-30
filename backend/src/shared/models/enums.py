@@ -23,12 +23,24 @@ class ProviderName(StrEnum):
     BOLSAI = "BOLSAI"
     ALPHA_VANTAGE = "ALPHA_VANTAGE"
 
+    BANCO_CENTRAL = "BANCO_CENTRAL"
+    """Exchange rates. Free and official, where brapi gates them behind Pro."""
+
 
 class ListType(StrEnum):
     """Partition of the registry. Also the GSI partition key on the Stocks table."""
 
     PORTFOLIO = "PORTFOLIO"
     WATCHLIST = "WATCHLIST"
+
+    REFERENCE = "REFERENCE"
+    """Collected but not owned — the USDBRL rate, for one.
+
+    CLAUDE.md files FX as "a special ticker USDBRL", which means it needs a
+    registry row to be collected. Without a third list type it would have to
+    masquerade as a holding or a watchlist entry, and would then turn up in the
+    portfolio weights as though it were a position.
+    """
 
 
 class LynchCategory(StrEnum):

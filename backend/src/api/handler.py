@@ -129,6 +129,8 @@ def list_stocks(
 ) -> dict[str, Any]:
     """Portfolio or watchlist, each stock already evaluated."""
     if raw_list_type is None:
+        # REFERENCE rows are deliberately absent: an exchange rate is not a
+        # holding, and listing it would put it in the weights.
         found = [
             *stocks.list_by_type(ListType.PORTFOLIO),
             *stocks.list_by_type(ListType.WATCHLIST),

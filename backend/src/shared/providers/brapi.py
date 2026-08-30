@@ -32,6 +32,8 @@ keys on *any* plan — they live inside the `defaultKeyStatistics` and
 lookups that can only ever return `None`.
 
 Everything fundamental comes from bolsai instead; see `bolsai.py`.
+Exchange rates come from the Banco Central: brapi's currency endpoint is
+behind the same Pro plan, so routing them here would be dead code.
 """
 
 

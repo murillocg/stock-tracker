@@ -258,8 +258,11 @@ def _targets(
         return found, unregistered
 
     return [
+        # REFERENCE included: the USDBRL rate is collected like everything else,
+        # it just is not owned.
         *stocks.list_by_type(ListType.PORTFOLIO),
         *stocks.list_by_type(ListType.WATCHLIST),
+        *stocks.list_by_type(ListType.REFERENCE),
     ], []
 
 
