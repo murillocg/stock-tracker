@@ -19,6 +19,7 @@ from typing import Any
 import boto3
 
 from api.responses import (
+    CollectionStatus,
     PortfolioTotals,
     StockDetailResponse,
     StockListResponse,
@@ -45,6 +46,7 @@ from shared.repository import (
     StockRepository,
     TransactionRepository,
 )
+from shared.schedule import DEFAULT_SCHEDULE, DEFAULT_TIMEZONE, next_run
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,24 @@ def exchange_rates(stocks: StockRepository) -> ExchangeRates:
         logger.warning("%s has no snapshot — USD holdings will not be weighted", FX_TICKER)
         return ExchangeRates(base=BASE_CURRENCY)
     return ExchangeRates(base=BASE_CURRENCY, rates={Currency.USD: fx.current.price})
+
+
+def collection_status(stocks: list[Stock], config: Config | None) -> CollectionStatus:
+    """Freshness of the data and the next scheduled refresh.
+
+    Both read off what is already loaded — the snapshots carry their own run
+    stamp — so this costs no extra query.
+    """
+    runs = [s.current.collected_at for s in stocks if s.current and s.current.collected_at]
+    days = [s.current.date for s in stocks if s.current]
+    expression = config.collection_schedule if config else DEFAULT_SCHEDULE
+    zone = config.schedule_timezone if config else DEFAULT_TIMEZONE
+    return CollectionStatus(
+        last_run=max(runs) if runs else None,
+        last_collected=max(days) if days else None,
+        next_run=next_run(expression, zone, dt.datetime.now(dt.UTC)),
+        timezone=zone,
+    )
 
 
 def build_views(
@@ -157,6 +177,7 @@ def list_stocks(
     stocks: StockRepository,
     transactions: TransactionRepository,
     raw_list_type: str | None,
+    config: Config | None = None,
 ) -> dict[str, Any]:
     """Portfolio or watchlist, each stock already evaluated."""
     if raw_list_type is None:
@@ -174,10 +195,14 @@ def list_stocks(
             return error(400, f"Unknown listType '{raw_list_type}'. Expected one of: {allowed}.")
         found = stocks.list_by_type(list_type)
 
-    views, totals = build_views(
-        sorted(found, key=lambda s: s.ticker), transactions, exchange_rates(stocks)
+    ordered = sorted(found, key=lambda s: s.ticker)
+    views, totals = build_views(ordered, transactions, exchange_rates(stocks))
+    return json_response(
+        200,
+        StockListResponse(
+            stocks=views, totals=totals, collection=collection_status(ordered, config)
+        ),
     )
-    return json_response(200, StockListResponse(stocks=views, totals=totals))
 
 
 def get_stock(
@@ -227,6 +252,7 @@ def route(
     stocks: StockRepository,
     snapshots: SnapshotRepository,
     transactions: TransactionRepository,
+    config: Config | None = None,
 ) -> dict[str, Any]:
     """Dispatch on API Gateway's `routeKey`, e.g. `GET /stocks/{ticker}`.
 
@@ -238,7 +264,7 @@ def route(
     path: dict[str, str] = event.get("pathParameters") or {}
 
     if route_key == "GET /stocks":
-        return list_stocks(stocks, transactions, params.get("listType"))
+        return list_stocks(stocks, transactions, params.get("listType"), config)
 
     if route_key == "GET /stocks/{ticker}":
         ticker = path.get("ticker", "")
@@ -266,6 +292,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             DynamoDbStockRepository(dynamodb.Table(config.stocks_table)),
             DynamoDbSnapshotRepository(dynamodb.Table(config.snapshots_table)),
             DynamoDbTransactionRepository(dynamodb.Table(config.transactions_table)),
+            config,
         )
     except Exception:
         logger.exception("Unhandled error serving %s", event.get("routeKey"))

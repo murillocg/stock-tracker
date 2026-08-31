@@ -76,6 +76,23 @@ class DailySnapshot(FetchedIndicators):
     change_6m: Decimal | None = Field(default=None, alias="change6m")
     change_1y: Decimal | None = Field(default=None, alias="change1y")
 
+    collected_at: dt.datetime | None = None
+    """When the collector run that produced this row started, in UTC.
+
+    Distinct from `date`, which is the trading day the figures describe. A run at
+    20:00 São Paulo writes rows dated that same day but stamped 23:00 UTC, and it
+    is the stamp that answers "when did the job last run" — the date only tells
+    you which session the numbers belong to.
+
+    Optional because every row written before this field existed has none, and a
+    missing timestamp is not worth a migration over: the screen falls back to the
+    trading day.
+    """
+
+    @field_serializer("collected_at")
+    def _serialise_collected_at(self, value: dt.datetime | None) -> str | None:
+        return None if value is None else value.isoformat()
+
     @field_serializer("date")
     def _serialise_date(self, value: dt.date) -> str:
         """DynamoDB has no date type; the sort key is an ISO 8601 string.

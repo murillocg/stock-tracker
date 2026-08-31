@@ -226,3 +226,40 @@ table.ledger tbody tr.is-muted { opacity: .45; }
 .broker .group-head { margin-bottom: .4rem; }
 .broker .group-head h2 { text-transform: none; letter-spacing: 0; font-size: .85rem; }
 p.footnote { margin: .5rem 0 0; font-size: .78rem; }
+
+/* When the data was refreshed, and when it will be next — the first thing worth
+   knowing before acting on any number below it. */
+.collection { margin: -.4rem 0 .2rem; display: flex; flex-wrap: wrap; gap: .1rem 1rem; }
+.collection b { color: var(--text); font-weight: 600; }
+.collection .sep { position: relative; }
+.collection .warn { color: var(--down, #b42318); }
+
+/* The row is a grid, not a wrapping flex line: the middle column absorbs the
+   chips and figures, and price/weight stay pinned to the right on the FIRST
+   line. Under flex they were pushed onto a line of their own as soon as the
+   chips got wide, which destroyed the column alignment the row exists for. */
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(3.5rem, auto) auto 1fr auto;
+  align-items: center;
+  column-gap: .7rem;
+  row-gap: .25rem;
+  flex-wrap: nowrap;
+}
+.row .checks { grid-column: 4; justify-self: start; }
+.row .figures { grid-column: 4; justify-self: start; }
+.row .row-end { grid-column: 5; }
+
+/* Two things want column 4. Give the figures their own row beneath the chips
+   rather than fighting over it, and let narrow screens stack the whole thing. */
+@media (min-width: 900px) {
+  .row { grid-template-columns: auto minmax(3.5rem, auto) auto auto 1fr auto; }
+  .row .figures { grid-column: 4; }
+  .row .checks { grid-column: 5; }
+  .row .row-end { grid-column: 6; }
+}
+@media (max-width: 640px) {
+  .row { grid-template-columns: auto 1fr auto; }
+  .row .figures, .row .checks { grid-column: 1 / -1; }
+  .row .row-end { grid-column: 3; grid-row: 1; }
+}

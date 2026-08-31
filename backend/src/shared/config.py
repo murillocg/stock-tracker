@@ -4,6 +4,8 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from shared.schedule import DEFAULT_SCHEDULE, DEFAULT_TIMEZONE
+
 
 class MissingConfigError(RuntimeError):
     """A required environment variable is absent. Fail loudly at cold start."""
@@ -37,6 +39,17 @@ class Config:
     *tomorrow*. The snapshot date is the sort key of the whole time series, so
     that is not cosmetic.
     """
+    collection_schedule: str = DEFAULT_SCHEDULE
+    """The collector's EventBridge schedule, so the API can say when it next runs.
+
+    Passed in rather than queried: the read Lambda has no business holding
+    scheduler permissions, and one variable beats an IAM policy plus an API call
+    on every page load. It must match `var.collection_schedule` in Terraform —
+    which is why lambda.tf sets both from the same variable.
+    """
+
+    schedule_timezone: str = DEFAULT_TIMEZONE
+
     provider_delay_seconds: float = 1.5
     """Pause before every upstream call. Collection is sequential to respect free-tier
     rate limits — see CLAUDE.md, "no parallelism"."""
@@ -64,4 +77,6 @@ class Config:
             aws_region=source.get("AWS_REGION", "us-east-1"),
             market_timezone=source.get("MARKET_TIMEZONE", "America/Sao_Paulo"),
             provider_delay_seconds=float(source.get("PROVIDER_DELAY_SECONDS", "1.5")),
+            collection_schedule=source.get("COLLECTION_SCHEDULE", DEFAULT_SCHEDULE),
+            schedule_timezone=source.get("SCHEDULE_TIMEZONE", DEFAULT_TIMEZONE),
         )

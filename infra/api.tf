@@ -73,6 +73,12 @@ resource "aws_lambda_function" "api" {
       TRANSACTIONS_TABLE = aws_dynamodb_table.transactions.name
       MARKET_TIMEZONE    = var.market_timezone
 
+      # Read by the API so the page can say when the data refreshes next.
+      # Sourced from the same variables the scheduler uses: two copies of a
+      # cron that can drift is a screen confidently stating the wrong time.
+      COLLECTION_SCHEDULE = var.collection_schedule
+      SCHEDULE_TIMEZONE   = var.schedule_timezone
+
       # Config.from_env() requires these, though the read path never uses them.
       # Empty strings would fail the required() check, so they are passed through.
       BRAPI_TOKEN           = var.brapi_token

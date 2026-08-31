@@ -95,6 +95,16 @@ export interface PortfolioTotals {
   unpriced: number
 }
 
+export interface CollectionStatus {
+  /** When the collector last actually ran. Null for rows written before stamping. */
+  lastRun: string | null
+  /** Freshest trading day held. Differs from lastRun when a run collected nothing. */
+  lastCollected: string | null
+  /** Null when the schedule is one the API cannot read — silence beats a wrong time. */
+  nextRun: string | null
+  timezone: string
+}
+
 export interface StockView {
   ticker: string
   name: string
@@ -150,7 +160,11 @@ async function get<T>(path: string): Promise<T> {
 
 export function listStocks(listType?: 'PORTFOLIO' | 'WATCHLIST') {
   const query = listType ? `?listType=${listType}` : ''
-  return get<{ stocks: StockView[]; totals: PortfolioTotals | null }>(`/stocks${query}`)
+  return get<{
+    stocks: StockView[]
+    totals: PortfolioTotals | null
+    collection: CollectionStatus | null
+  }>(`/stocks${query}`)
 }
 
 export function getStock(ticker: string, days = 90) {
@@ -182,6 +196,30 @@ export function sumDecimals(values: string[]): string {
   }, 0)
   const abs = Math.abs(cents)
   return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`
+}
+
+/**
+ * "in 3h", "in 2 days", "4 hours ago" — a distance, not a timestamp.
+ *
+ * The question behind the next-run line is "is my data about to change?", and a
+ * duration answers it without the reader doing date arithmetic in their head.
+ */
+export function relativeTime(iso: string): string {
+  const target = new Date(iso).getTime()
+  if (Number.isNaN(target)) return ''
+  const minutes = Math.round((target - Date.now()) / 60000)
+  const ahead = minutes >= 0
+  const size = Math.abs(minutes)
+
+  const [amount, unit] =
+    size < 60
+      ? [size, 'minute']
+      : size < 60 * 24
+        ? [Math.round(size / 60), 'hour']
+        : [Math.round(size / (60 * 24)), 'day']
+
+  const plural = `${amount} ${unit}${amount === 1 ? '' : 's'}`
+  return ahead ? `in ${plural}` : `${plural} ago`
 }
 
 /** Sign of a Decimal string, judged textually — no float conversion involved. */

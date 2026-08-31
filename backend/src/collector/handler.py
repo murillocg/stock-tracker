@@ -181,6 +181,7 @@ def collect_one(
     snapshots: SnapshotRepository,
     as_of: dt.date,
     pace: Pacer | None = None,
+    collected_at: dt.datetime | None = None,
 ) -> DailySnapshot:
     """FETCH then COMPUTE for a single stock. Does not persist anything.
 
@@ -200,7 +201,12 @@ def collect_one(
     changes = compute_changes(history, as_of=as_of, current_price=quote.price)
 
     snapshot = DailySnapshot.model_validate(
-        {"ticker": stock.ticker, "date": as_of, **merge(quote, fundamentals)}
+        {
+            "ticker": stock.ticker,
+            "date": as_of,
+            "collected_at": collected_at,
+            **merge(quote, fundamentals),
+        }
     )
     return apply_changes(snapshot, changes)
 
@@ -254,6 +260,7 @@ def collect_all(
     tickers: Sequence[str] | None = None,
     skip_existing: bool = True,
     sleep: Callable[[float], None] = time.sleep,
+    collected_at: dt.datetime | None = None,
 ) -> CollectionReport:
     """Collect every target sequentially, one ticker at a time.
 
@@ -298,6 +305,7 @@ def collect_all(
                 snapshots=snapshots,
                 as_of=as_of,
                 pace=pace,
+                collected_at=collected_at,
             )
         except AuthenticationError:
             # Listed first because it is a subclass of ProviderError and `except`
@@ -366,6 +374,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             as_of=as_of,
             delay_seconds=config.provider_delay_seconds,
             tickers=tickers,
+            # One stamp for the whole run, taken once: every row a run writes
+            # shares it, which is what makes "when did the job last run" a
+            # question with a single answer rather than twenty near-misses.
+            collected_at=dt.datetime.now(dt.UTC),
         )
 
     return report.model_dump(mode="json", by_alias=True)

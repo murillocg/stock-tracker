@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { brl, bySignal, listStocks, sumDecimals, type PortfolioTotals, type StockView } from '@/api'
+import {
+  brl,
+  bySignal,
+  listStocks,
+  sumDecimals,
+  type CollectionStatus,
+  type PortfolioTotals,
+  type StockView,
+} from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
+import CollectionLine from '@/components/CollectionLine.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import PortfolioSummary from '@/components/PortfolioSummary.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -12,6 +21,7 @@ type Tab = 'PORTFOLIO' | 'WATCHLIST'
 const tab = ref<Tab>('PORTFOLIO')
 const stocks = ref<StockView[]>([])
 const totals = ref<PortfolioTotals | null>(null)
+const collection = ref<CollectionStatus | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
 
@@ -24,6 +34,7 @@ watchEffect(async () => {
     const data = await listStocks(tab.value)
     stocks.value = data.stocks
     totals.value = data.totals
+    collection.value = data.collection
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not reach the API.'
   } finally {
@@ -71,15 +82,15 @@ const groups = computed(() =>
     .map((group) => ({ ...group, ...subtotal(group.stocks) })),
 )
 
-const collected = computed(() => sorted.value.find((s) => s.current)?.current?.date ?? null)
 </script>
 
 <template>
   <div class="page">
     <header class="page-head">
       <h1>Stock Tracker</h1>
-      <span v-if="collected" class="subtle">collected {{ collected }}</span>
     </header>
+
+    <CollectionLine v-if="collection" :collection="collection" />
 
     <nav class="tabs">
       <button :aria-pressed="tab === 'PORTFOLIO'" @click="tab = 'PORTFOLIO'">Portfolio</button>
@@ -118,6 +129,7 @@ const collected = computed(() => sorted.value.find((s) => s.current)?.current?.d
           :position="stock.position"
           :valuation="stock.valuation"
           :currency="stock.currency"
+          :priced="Boolean(stock.current)"
           compact
         />
 

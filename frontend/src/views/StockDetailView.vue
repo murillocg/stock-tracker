@@ -78,6 +78,7 @@ const CHANGES = [
           :position="stock.position"
           :valuation="stock.valuation"
           :currency="stock.currency"
+          :priced="Boolean(stock.current)"
         />
         <CheckChips :checks="stock.evaluation.checks" />
         <p v-if="stock.current?.referenceDate" class="subtle" style="margin: .8rem 0 0">

@@ -6,10 +6,13 @@ withDefaults(
     position: Position | null
     valuation: Valuation | null
     currency: string
+    /** Whether a price was collected at all. Distinguishes the two ways a
+        holding ends up unvalued, which need different fixes. */
+    priced?: boolean
     /** One line, for the portfolio list. The detail page keeps the full set. */
     compact?: boolean
   }>(),
-  { compact: false },
+  { compact: false, priced: true },
 )
 
 const symbol = (currency: string) => (currency === 'BRL' ? 'R$' : '$')
@@ -49,6 +52,11 @@ const symbol = (currency: string) => (currency === 'BRL' ? 'R$' : '$')
       </span>
     </template>
 
-    <span v-else class="fig k">not priced &mdash; needs an exchange rate</span>
+    <!-- Two different failures, and they were saying the same thing. No price
+         means the collector has not reached this ticker yet; no rate means USDBRL
+         was not collected. Sending someone to check the exchange rate when the
+         stock simply has no quote wastes their time. -->
+    <span v-else-if="!priced" class="fig k">no price collected yet</span>
+    <span v-else class="fig k">not valued &mdash; needs an exchange rate</span>
   </div>
 </template>

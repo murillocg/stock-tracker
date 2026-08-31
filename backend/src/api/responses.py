@@ -1,5 +1,6 @@
 """What the read API returns. Pydantic at the boundary, as everywhere else."""
 
+import datetime as dt
 from decimal import Decimal
 from typing import Any
 
@@ -89,11 +90,35 @@ class PortfolioTotals(CamelModel):
     """How many holdings are in, and how many were left out for want of a rate."""
 
 
+class CollectionStatus(CamelModel):
+    """When the data was last refreshed, and when it will be next.
+
+    On the main screen because the single most useful thing to know before acting
+    on any of these numbers is how old they are.
+    """
+
+    last_run: dt.datetime | None
+    """When the collector last actually ran. `None` for data written before runs
+    were stamped, in which case `lastCollected` is all there is."""
+
+    last_collected: dt.date | None
+    """The freshest trading day in the portfolio. Not the same as `lastRun`: a run
+    that fails every ticker leaves this untouched, which is precisely the gap
+    worth seeing."""
+
+    next_run: dt.datetime | None
+    """`None` when the schedule is not one this code can read — better silent
+    than wrong, since the whole point is knowing if a refresh is imminent."""
+
+    timezone: str
+
+
 class StockListResponse(CamelModel):
     """GET /stocks — one list, already judged and weighted."""
 
     stocks: list[StockView]
     totals: PortfolioTotals | None = None
+    collection: CollectionStatus | None = None
 
 
 class StockDetailResponse(CamelModel):
