@@ -62,6 +62,30 @@ def _percent(value: Decimal | None) -> Decimal | None:
     return None if value is None else to_ratio(value * 100)
 
 
+def raise_for_body(symbol: str, payload: dict[str, Any]) -> None:
+    """Translate Alpha Vantage's in-body errors into our vocabulary.
+
+    Module-level rather than a private method on the provider because the seeding
+    script needs exactly this too, and the version it grew on its own missed the
+    rate-limit envelope — reporting an exhausted quota as "unknown ticker", which
+    is the one conclusion that sends you off checking a symbol that was fine.
+    """
+    if "Error Message" in payload:
+        raise TickerNotFoundError(f"Alpha Vantage rejected {symbol}: {payload['Error Message']}")
+
+    # "Note" is the classic rate-limit envelope; "Information" is what the
+    # newer free tier uses for both quota exhaustion and an invalid key.
+    for key in ("Note", "Information"):
+        message = payload.get(key)
+        if not isinstance(message, str):
+            continue
+        lowered = message.lower()
+        # Alpha Vantage writes it both ways depending on the endpoint.
+        if ("apikey" in lowered or "api key" in lowered) and "invalid" in lowered:
+            raise AuthenticationError(f"Alpha Vantage rejected our API key: {message}")
+        raise ProviderUnavailableError(f"Alpha Vantage limit hit for {symbol}: {message}")
+
+
 class AlphaVantageProvider:
     """US quotes and fundamentals. Satisfies both provider Protocols."""
 
@@ -156,25 +180,5 @@ class AlphaVantageProvider:
         if not isinstance(payload, dict):
             raise MalformedResponseError(f"Alpha Vantage payload for {symbol} is not an object")
 
-        self._raise_for_body(symbol, payload)
+        raise_for_body(symbol, payload)
         return payload
-
-    @staticmethod
-    def _raise_for_body(symbol: str, payload: dict[str, Any]) -> None:
-        """Translate Alpha Vantage's in-body errors into our vocabulary."""
-        if "Error Message" in payload:
-            raise TickerNotFoundError(
-                f"Alpha Vantage rejected {symbol}: {payload['Error Message']}"
-            )
-
-        # "Note" is the classic rate-limit envelope; "Information" is what the
-        # newer free tier uses for both quota exhaustion and an invalid key.
-        for key in ("Note", "Information"):
-            message = payload.get(key)
-            if not isinstance(message, str):
-                continue
-            lowered = message.lower()
-            # Alpha Vantage writes it both ways depending on the endpoint.
-            if ("apikey" in lowered or "api key" in lowered) and "invalid" in lowered:
-                raise AuthenticationError(f"Alpha Vantage rejected our API key: {message}")
-            raise ProviderUnavailableError(f"Alpha Vantage limit hit for {symbol}: {message}")

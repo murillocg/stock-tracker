@@ -25,6 +25,7 @@ from shared.providers.factory import (
     get_provider,
 )
 from shared.providers.fundamentals import ProviderFundamentals
+from shared.providers.pacing import Pacer
 from shared.providers.protocol import FundamentalsProvider, QuoteProvider
 from shared.providers.quote import ProviderQuote
 
@@ -37,6 +38,7 @@ __all__ = [
     "FeatureUnavailableError",
     "FundamentalsProvider",
     "MalformedResponseError",
+    "Pacer",
     "ProviderError",
     "ProviderFundamentals",
     "ProviderQuote",

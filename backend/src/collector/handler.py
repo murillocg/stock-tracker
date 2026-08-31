@@ -24,6 +24,7 @@ from shared.models import CamelModel, DailySnapshot, ListType, ProviderName, Sto
 from shared.providers import (
     AuthenticationError,
     FundamentalsProvider,
+    Pacer,
     ProviderError,
     ProviderFundamentals,
     ProviderQuote,
@@ -102,30 +103,6 @@ class CollectionReport(CamelModel):
         for result in self.results:
             counts[result.outcome] += 1
         return {outcome.value: count for outcome, count in counts.items()}
-
-
-class Pacer:
-    """Spaces out upstream calls. One per run, shared by every provider.
-
-    The delay used to sit between *tickers*, which was wrong the moment a single
-    provider served both capabilities: brapi and bolsai are separate services, so
-    a quote and a fundamentals call could fire together harmlessly, but Alpha
-    Vantage answers both and rejects anything faster than one request a second.
-
-    Pacing every call rather than every ticker is correct for all of them, and
-    costs one extra second per stock on the Brazilian path.
-    """
-
-    def __init__(self, delay_seconds: float, sleep: Callable[[float], None]) -> None:
-        self._delay = delay_seconds
-        self._sleep = sleep
-        self._called = False
-
-    def wait(self) -> None:
-        """Pause before every call except the first of the run."""
-        if self._called:
-            self._sleep(self._delay)
-        self._called = True
 
 
 def market_today(timezone: str) -> dt.date:
