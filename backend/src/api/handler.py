@@ -32,7 +32,7 @@ from shared.models import Currency, ListType, Stock
 from shared.positions import (
     ExchangeRates,
     Valuation,
-    current_position,
+    combined_position,
     running_by_broker,
     value,
     with_weights,
@@ -106,7 +106,7 @@ def build_views(
         rows = ledger.get(stock.ticker)
         if not rows:
             continue
-        position = current_position(stock.ticker, rows)
+        position = combined_position(stock.ticker, rows)
         if position is None or position.quantity == 0:
             continue
         positions[stock.ticker] = position
@@ -202,7 +202,7 @@ def get_stock(
     history = snapshots.history(stock.ticker, since=today - dt.timedelta(days=days), until=today)
 
     rows = transactions.for_ticker(stock.ticker)
-    position = current_position(stock.ticker, rows) if rows else None
+    position = combined_position(stock.ticker, rows) if rows else None
     # The rate matters even for a single stock: without it a USD holding's
     # base figures would come back as its dollar amounts wearing a BRL label.
     # `weight` stays None here — a share of one is not a share of a portfolio.

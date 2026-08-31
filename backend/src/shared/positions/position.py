@@ -276,3 +276,41 @@ def running_by_broker(ticker: str, transactions: Sequence[Transaction]) -> list[
             )
         )
     return ledgers
+
+
+def combined_position(ticker: str, transactions: Sequence[Transaction]) -> Position | None:
+    """The whole holding, built by summing what each custodian actually holds.
+
+    Not the same as folding every row into one series, and the difference is not
+    rounding. Pooling all brokers' buys into a single average and then letting
+    sales leave it untouched produces a number belonging to no real account:
+    PRIO3 pools to 31.23 while the two accounts that exist hold 300 at 35.06 and
+    300 at 24.51, which blend to 29.78. Shares are sold out of an account, not
+    out of a pool, so the account is the only place an average can be true.
+
+    Quantity is unaffected either way — it is linear, and transfers net out — so
+    portfolio weights do not move. What this corrects is `invested` and the
+    unrealised gain derived from it.
+
+    `realised_gain` totals only the accounts still open: an account that closed
+    entirely has no position left to carry it. Phase 4 needs the strict
+    full-history fold for that, and this is not it.
+    """
+    ledgers = running_by_broker(ticker, transactions)
+    held = [ledger.position for ledger in ledgers if ledger.position is not None]
+    if not held:
+        return None
+
+    quantity = sum((p.quantity for p in held), Decimal(0))
+    invested = sum((p.invested for p in held), Decimal(0))
+    realised = sum((p.realised_gain for p in held), Decimal(0))
+    return Position(
+        ticker=ticker,
+        currency=held[0].currency,
+        quantity=_tidy(quantity),
+        average_price=(
+            None if quantity == 0 else (invested / quantity).quantize(MONEY, ROUND_HALF_UP)
+        ),
+        invested=invested,
+        realised_gain=realised,
+    )

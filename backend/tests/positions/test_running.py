@@ -4,7 +4,12 @@ import datetime as dt
 from decimal import Decimal
 
 from shared.models import Currency, Transaction, TransactionType
-from shared.positions import current_position, running, running_by_broker
+from shared.positions import (
+    combined_position,
+    current_position,
+    running,
+    running_by_broker,
+)
 
 
 def trade(
@@ -202,3 +207,55 @@ def test_rows_with_no_broker_sort_last() -> None:
     )
 
     assert [ledger.broker for ledger in ledgers] == ["NU INVEST", None]
+
+
+def test_the_combined_position_sums_the_accounts_rather_than_pooling_them() -> None:
+    """Pooling every broker's buys into one average and then letting sales leave
+    it untouched yields a number belonging to no real account.
+
+    Here: 100 bought at 40 in one account and 100 at 60 in another, then 100 sold
+    from the cheap one. What remains is 100 at 40 plus nothing at 60 — an average
+    of 40. The pooled fold would average the buys to 50 and leave it there.
+    """
+    transactions = [
+        at("BTG PACTUAL", 1, TransactionType.BUY, "100", "40.00"),
+        at("NU INVEST", 2, TransactionType.BUY, "100", "60.00"),
+        at("NU INVEST", 3, TransactionType.SELL, "100", "70.00"),
+    ]
+
+    combined = combined_position("PRIO3", transactions)
+    pooled = current_position("PRIO3", transactions)
+
+    assert combined is not None and pooled is not None
+    assert combined.quantity == pooled.quantity == Decimal("100")
+    assert combined.average_price == Decimal("40.00")
+    assert pooled.average_price == Decimal("50.00")  # the fiction
+
+
+def test_quantity_is_unaffected_so_portfolio_weights_do_not_move() -> None:
+    """Quantity is linear, so both readings agree on it. Only the cost basis —
+    and the unrealised gain derived from it — was wrong."""
+    transactions = [
+        at("BTG PACTUAL", 1, TransactionType.BUY, "300", "24.09"),
+        at("NU INVEST", 2, TransactionType.BUY, "400", "25.66"),
+        at("BTG PACTUAL", 3, TransactionType.SELL, "100", "32.22"),
+    ]
+
+    combined = combined_position("PRIO3", transactions)
+    pooled = current_position("PRIO3", transactions)
+
+    assert combined is not None and pooled is not None
+    assert combined.quantity == pooled.quantity == Decimal("600")
+
+
+def test_it_is_none_when_every_account_is_closed() -> None:
+    assert (
+        combined_position(
+            "PRIO3",
+            [
+                at("NU INVEST", 1, TransactionType.BUY, "100", "10.00"),
+                at("NU INVEST", 2, TransactionType.SELL, "100", "20.00"),
+            ],
+        )
+        is None
+    )
