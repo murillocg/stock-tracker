@@ -16,7 +16,7 @@ from shared.models import (
     Stock,
 )
 from shared.models.types import Ticker
-from shared.positions import LedgerEntry, Position, Valuation
+from shared.positions import BrokerLedger, Position, Valuation
 
 
 class StockView(CamelModel):
@@ -102,12 +102,13 @@ class StockDetailResponse(CamelModel):
     stock: StockView
     history: list[DailySnapshot]
 
-    ledger: list[LedgerEntry] = Field(default_factory=list)
-    """Every transaction with the position after it, oldest first.
+    ledgers: list[BrokerLedger] = Field(default_factory=list)
+    """Transactions grouped by custodian, each with its own running average.
 
-    Sent whole rather than summarised because the average price is the one figure
-    here that cannot be checked by eye — it is the output of a fold, and the only
-    way to trust it is to watch it move trade by trade."""
+    Grouped rather than flat because this is what the tax return asks for: Bens e
+    Direitos takes one entry per institution, with that institution's own
+    quantity and average cost. The blended figure at the top of the page is the
+    portfolio answer; these are the fiscal one."""
 
 
 class ErrorResponse(CamelModel):

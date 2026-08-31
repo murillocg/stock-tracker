@@ -219,3 +219,10 @@ table.history td.num, table.history th.num {
   text-align: right; font-variant-numeric: tabular-nums;
 }
 table.ledger tbody tr.is-muted { opacity: .45; }
+
+/* One block per custodian on the detail page — the unit the tax return uses. */
+.broker { margin-bottom: 1.5rem; }
+.broker:last-child { margin-bottom: 0; }
+.broker .group-head { margin-bottom: .4rem; }
+.broker .group-head h2 { text-transform: none; letter-spacing: 0; font-size: .85rem; }
+p.footnote { margin: .5rem 0 0; font-size: .78rem; }

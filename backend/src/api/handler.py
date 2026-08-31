@@ -33,7 +33,7 @@ from shared.positions import (
     ExchangeRates,
     Valuation,
     current_position,
-    running,
+    running_by_broker,
     value,
     with_weights,
 )
@@ -217,7 +217,7 @@ def get_stock(
         StockDetailResponse(
             stock=StockView.of(stock, evaluate(stock), position=position, valuation=valuation),
             history=history,
-            ledger=running(stock.ticker, rows),
+            ledgers=running_by_broker(stock.ticker, rows),
         ),
     )
 

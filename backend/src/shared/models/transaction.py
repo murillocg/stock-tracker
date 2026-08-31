@@ -81,13 +81,21 @@ class Transaction(CamelModel):
     currency: Currency
 
     broker: str | None = None
-    """Which custodian executed it, from B3's `Instituição` column.
+    """Which custodian holds it, from B3's `Instituição` column.
 
-    Recorded but never used to split a position. Brazilian IRPF computes average
-    cost per *security* aggregated across custodians — holding PRIO3 at two
-    brokers is one position with one average, not two. Keeping the broker on each
-    row means a per-broker breakdown is always derivable without making it the
-    unit of accounting.
+    A unit of accounting, not a label. Brazilian IRPF is declared **per custody
+    institution** in Bens e Direitos: PRIO3 held at Nu Invest and at BTG is two
+    declarations, each with its own quantity and its own average cost, not one
+    aggregated position.
+
+    (An earlier version of this comment claimed the opposite — that the average
+    is computed per security across custodians. It is not, and the whole reason
+    TRANSFER_IN and TRANSFER_OUT exist is to move shares between brokers at cost
+    so each broker's average stays right.)
+
+    The portfolio view still totals across brokers, because a weight is about how
+    much of your money sits in one company and does not care who holds the
+    shares. Both readings come off the same rows.
     """
 
     fees: Decimal | None = None

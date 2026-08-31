@@ -128,6 +128,13 @@ export interface LedgerEntry {
   position: Position | null
 }
 
+export interface BrokerLedger {
+  broker: string | null
+  entries: LedgerEntry[]
+  /** This custodian's holding today. Null once they hold none of it. */
+  position: Position | null
+}
+
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
 async function get<T>(path: string): Promise<T> {
@@ -147,7 +154,7 @@ export function listStocks(listType?: 'PORTFOLIO' | 'WATCHLIST') {
 }
 
 export function getStock(ticker: string, days = 90) {
-  return get<{ stock: StockView; history: Snapshot[]; ledger: LedgerEntry[] }>(
+  return get<{ stock: StockView; history: Snapshot[]; ledgers: BrokerLedger[] }>(
     `/stocks/${ticker}?days=${days}`,
   )
 }

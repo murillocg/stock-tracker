@@ -230,3 +230,49 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
         state = _apply(ticker, currency, state, transaction)
 
     return _to_position(ticker, currency, state)
+
+
+class BrokerLedger(CamelModel):
+    """One custodian's rows for a ticker, folded on their own.
+
+    The unit the Brazilian tax return actually asks for: each institution is a
+    separate entry in Bens e Direitos, with its own quantity and average cost.
+    A single blended average across brokers is the right number for a portfolio
+    weight and the wrong number for the declaration.
+    """
+
+    broker: str | None
+    entries: list[LedgerEntry]
+    position: Position | None
+    """This broker's holding today. `None` once they hold none of it — the
+    account is kept on screen because a closed position still had a year in which
+    it was declared."""
+
+
+def running_by_broker(ticker: str, transactions: Sequence[Transaction]) -> list[BrokerLedger]:
+    """Fold each custodian's rows separately, oldest first.
+
+    Transfers make this work rather than break it: a TRANSFER_OUT leaves one
+    broker at cost and the matching TRANSFER_IN arrives at the other carrying
+    that same cost, so both averages stay true. Folding the ledger as one series
+    would net them out and lose exactly the split the tax return needs.
+
+    `since_last_flat` applies per broker, since an account can close and reopen
+    independently of the others.
+    """
+    grouped: dict[str | None, list[Transaction]] = {}
+    for transaction in transactions:
+        grouped.setdefault(transaction.broker, []).append(transaction)
+
+    ledgers = []
+    # Named brokers alphabetically, then the unattributed rows last.
+    for broker in sorted(grouped, key=lambda b: (b is None, b or "")):
+        entries = running(ticker, grouped[broker])
+        ledgers.append(
+            BrokerLedger(
+                broker=broker,
+                entries=entries,
+                position=entries[-1].position if entries else None,
+            )
+        )
+    return ledgers

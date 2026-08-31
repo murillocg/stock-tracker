@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { getStock, type LedgerEntry, type Snapshot, type StockView } from '@/api'
+import { getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -10,7 +10,7 @@ const props = defineProps<{ ticker: string }>()
 
 const stock = ref<StockView | null>(null)
 const history = ref<Snapshot[]>([])
-const ledger = ref<LedgerEntry[]>([])
+const ledgers = ref<BrokerLedger[]>([])
 const error = ref<string | null>(null)
 const loading = ref(true)
 
@@ -21,7 +21,7 @@ watchEffect(async () => {
     const data = await getStock(props.ticker)
     stock.value = data.stock
     history.value = [...data.history].reverse()
-    ledger.value = data.ledger
+    ledgers.value = data.ledgers
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Could not reach the API.'
   } finally {
@@ -33,12 +33,14 @@ type Panel = 'history' | 'transactions'
 
 const panel = ref<Panel>('transactions')
 
+const rowCount = computed(() =>
+  ledgers.value.reduce((total, ledger) => total + ledger.entries.length, 0),
+)
+
 // Rows before the last flat point are shown but carry no running position: the
 // holding went to zero there, so nothing earlier bears on today's average.
-const preReset = computed(() => ledger.value.filter((entry) => entry.position === null).length)
-
-/** The position after the final trade — the same figure shown at the top. */
-const settled = computed(() => ledger.value[ledger.value.length - 1]?.position ?? null)
+const preReset = (ledger: BrokerLedger) =>
+  ledger.entries.filter((entry) => entry.position === null).length
 
 const CHANGES = [
   ['1w', 'change1w'],
@@ -99,7 +101,7 @@ const CHANGES = [
             :aria-pressed="panel === 'transactions'"
             @click="panel = 'transactions'"
           >
-            Transactions ({{ ledger.length }})
+            Transactions ({{ rowCount }})
           </button>
           <button :aria-pressed="panel === 'history'" @click="panel = 'history'">
             Price history ({{ history.length }})
@@ -107,57 +109,72 @@ const CHANGES = [
         </nav>
 
         <template v-if="panel === 'transactions'">
-          <table v-if="ledger.length" class="history ledger">
-            <thead>
-              <tr>
-                <th>date</th>
-                <th>type</th>
-                <th>broker</th>
-                <th class="num">qty</th>
-                <th class="num">price</th>
-                <th class="num">holding</th>
-                <th class="num">average</th>
-                <th class="num">invested</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- The fold made visible. The average is the one figure on this
-                   page that cannot be checked by eye — it is the result of every
-                   trade in order, and the only way to trust it is to watch it
-                   move. The last row is the number shown at the top. -->
-              <tr
-                v-for="entry in ledger"
-                :key="entry.transaction.date + entry.transaction.type + entry.transaction.quantity"
-                :class="{ 'is-muted': entry.position === null }"
-                :title="entry.transaction.note ?? undefined"
-              >
-                <td>{{ entry.transaction.date }}</td>
-                <td>{{ entry.transaction.type.toLowerCase().replace('_', ' ') }}</td>
-                <td>{{ entry.transaction.broker ?? '—' }}</td>
-                <td class="num">{{ entry.transaction.quantity }}</td>
-                <td class="num">
-                  {{ entry.transaction.unitPrice === '0' ? '—' : entry.transaction.unitPrice }}
-                </td>
-                <td class="num">{{ entry.position?.quantity ?? '—' }}</td>
-                <td class="num"><b>{{ entry.position?.averagePrice ?? '—' }}</b></td>
-                <td class="num">{{ entry.position?.invested ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-else class="subtle">No transactions recorded for this stock.</p>
+          <!-- One block per custodian, because that is the unit the Brazilian
+               tax return asks for: Bens e Direitos takes an entry per
+               institution, each with its own quantity and average cost. The
+               blended figure at the top of this page answers a different
+               question — how much of the portfolio sits in this company. -->
+          <section v-for="ledger in ledgers" :key="ledger.broker ?? 'none'" class="broker">
+            <header class="group-head">
+              <h2>{{ ledger.broker ?? 'no broker recorded' }}</h2>
+              <span v-if="ledger.position" class="subtle">
+                {{ ledger.position.quantity }} @ {{ ledger.position.averagePrice }}
+                &middot; {{ ledger.position.invested }} invested
+              </span>
+              <span v-else class="subtle">closed &mdash; nothing held here now</span>
+            </header>
 
-          <p v-if="preReset" class="subtle" style="margin-bottom: 0">
-            The first {{ preReset }} row(s) are dimmed: the holding went to zero after them,
-            so they are real trades but do not bear on today's average.
-          </p>
-          <p
-            v-else-if="settled && settled.realisedGain !== '0.00'"
-            class="subtle"
-            style="margin-bottom: 0"
-          >
-            Realised gain to date: {{ settled.realisedGain }} — booked on sales,
-            and not part of the average above.
-          </p>
+            <table class="history ledger">
+              <thead>
+                <tr>
+                  <th>date</th>
+                  <th>type</th>
+                  <th class="num">qty</th>
+                  <th class="num">price</th>
+                  <th class="num">holding</th>
+                  <th class="num">average</th>
+                  <th class="num">invested</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- The fold made visible. The average is the one figure here
+                     that cannot be checked by eye — it is the result of every
+                     trade in order, and the only way to trust it is to watch it
+                     move. -->
+                <tr
+                  v-for="entry in ledger.entries"
+                  :key="entry.transaction.date + entry.transaction.type + entry.transaction.quantity"
+                  :class="{ 'is-muted': entry.position === null }"
+                  :title="entry.transaction.note ?? undefined"
+                >
+                  <td>{{ entry.transaction.date }}</td>
+                  <td>{{ entry.transaction.type.toLowerCase().replace('_', ' ') }}</td>
+                  <td class="num">{{ entry.transaction.quantity }}</td>
+                  <td class="num">
+                    {{ entry.transaction.unitPrice === '0' ? '—' : entry.transaction.unitPrice }}
+                  </td>
+                  <td class="num">{{ entry.position?.quantity ?? '—' }}</td>
+                  <td class="num"><b>{{ entry.position?.averagePrice ?? '—' }}</b></td>
+                  <td class="num">{{ entry.position?.invested ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p v-if="preReset(ledger)" class="subtle footnote">
+              The first {{ preReset(ledger) }} row(s) are dimmed: the holding at this broker
+              went to zero after them, so they are real trades but do not bear on the
+              average above.
+            </p>
+            <p
+              v-else-if="ledger.position && ledger.position.realisedGain !== '0.00'"
+              class="subtle footnote"
+            >
+              Realised gain here: {{ ledger.position.realisedGain }} — booked on sales,
+              and not part of the average.
+            </p>
+          </section>
+
+          <p v-if="!ledgers.length" class="subtle">No transactions recorded for this stock.</p>
         </template>
 
         <template v-else>

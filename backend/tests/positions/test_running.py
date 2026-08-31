@@ -4,7 +4,7 @@ import datetime as dt
 from decimal import Decimal
 
 from shared.models import Currency, Transaction, TransactionType
-from shared.positions import current_position, running
+from shared.positions import current_position, running, running_by_broker
 
 
 def trade(
@@ -111,3 +111,94 @@ def test_it_is_ordered_oldest_first_regardless_of_input_order() -> None:
     )
 
     assert [e.transaction.date.day for e in entries] == [1, 9]
+
+
+# --- per custodian, which is how the tax return asks for it ------------------
+
+
+def at(broker: str, day: int, type_: TransactionType, quantity: str, price: str) -> Transaction:
+    return Transaction(
+        ticker="PRIO3",
+        date=dt.date(2026, 1, day),
+        type=type_,
+        quantity=Decimal(quantity),
+        unit_price=Decimal(price),
+        currency=Currency.BRL,
+        broker=broker,
+        id=f"{broker}-{day}",
+    )
+
+
+def test_each_broker_keeps_its_own_average() -> None:
+    """The same security at two custodians is two declarations, each with its own
+    cost — not one blended position."""
+    ledgers = running_by_broker(
+        "PRIO3",
+        [
+            at("BTG PACTUAL", 1, TransactionType.BUY, "100", "40.00"),
+            at("NU INVEST", 2, TransactionType.BUY, "100", "60.00"),
+        ],
+    )
+
+    assert [ledger.broker for ledger in ledgers] == ["BTG PACTUAL", "NU INVEST"]
+    averages = [ledger.position.average_price for ledger in ledgers if ledger.position]
+    assert averages == [Decimal("40.00"), Decimal("60.00")]
+
+
+def test_a_transfer_carries_the_cost_to_the_receiving_broker() -> None:
+    """The reason TRANSFER_IN and TRANSFER_OUT exist. Folding the ledger as one
+    series would net these two rows out and lose the split entirely."""
+    ledgers = running_by_broker(
+        "PRIO3",
+        [
+            at("INTER", 1, TransactionType.BUY, "100", "27.01"),
+            at("INTER", 2, TransactionType.TRANSFER_OUT, "100", "0"),
+            at("BTG PACTUAL", 2, TransactionType.TRANSFER_IN, "100", "27.01"),
+        ],
+    )
+
+    by_broker = {ledger.broker: ledger for ledger in ledgers}
+    # Inter holds none of it any more, and must not still appear to.
+    assert by_broker["INTER"].position is None
+    btg = by_broker["BTG PACTUAL"].position
+    assert btg is not None
+    assert btg.quantity == Decimal("100")
+    assert btg.average_price == Decimal("27.01")
+
+
+def test_the_brokers_sum_to_the_combined_position() -> None:
+    """Both readings come off the same rows: per broker for the declaration,
+    totalled for the portfolio weight."""
+    transactions = [
+        at("BTG PACTUAL", 1, TransactionType.BUY, "100", "40.00"),
+        at("NU INVEST", 2, TransactionType.BUY, "300", "60.00"),
+    ]
+
+    ledgers = running_by_broker("PRIO3", transactions)
+    combined = current_position("PRIO3", transactions)
+
+    assert combined is not None
+    held = sum((ledger.position.quantity for ledger in ledgers if ledger.position), Decimal(0))
+    assert held == combined.quantity == Decimal("400")
+    # The blended average is the weighted mean of the two, not either of them.
+    assert combined.average_price == Decimal("55.00")
+
+
+def test_rows_with_no_broker_sort_last() -> None:
+    ledgers = running_by_broker(
+        "PRIO3",
+        [
+            Transaction(
+                ticker="PRIO3",
+                date=dt.date(2026, 1, 1),
+                type=TransactionType.BUY,
+                quantity=Decimal("10"),
+                unit_price=Decimal("10"),
+                currency=Currency.BRL,
+                id="none-1",
+            ),
+            at("NU INVEST", 2, TransactionType.BUY, "10", "10.00"),
+        ],
+    )
+
+    assert [ledger.broker for ledger in ledgers] == ["NU INVEST", None]
