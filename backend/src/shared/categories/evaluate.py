@@ -92,7 +92,7 @@ def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
         check(
             "P/E",
             snapshot.pe,
-            stalwart_pe_band(stock.market),
+            stalwart_pe_band(stock.is_foreign),
             "A stalwart is bought for steady compounding, so overpaying for it "
             "spends years of that return up front. The limit follows the market: "
             "a lower risk-free rate supports a higher multiple.",

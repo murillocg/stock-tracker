@@ -464,9 +464,30 @@ def test_nyse_and_nasdaq_share_a_band() -> None:
     assert signals_by_name(nyse)["P/E"] is signals_by_name(nasdaq)["P/E"]
 
 
-def test_every_market_has_a_band() -> None:
-    """A market added without one would silently inherit a limit nobody chose."""
-    from shared.categories.rules import stalwart_pe_band
+# 28.04 is MSFT34's real P/E, and it is the value that discriminates: over the
+# Brazilian yellow limit of 25, inside the international band of 25-35.
+MSFT34_PE = Decimal("28.04")
 
-    for market in Market:
-        assert stalwart_pe_band(market) is not None
+
+def test_a_bdr_gets_the_international_band_despite_listing_on_the_b3(
+    snapshot: DailySnapshot,
+) -> None:
+    """The bug this replaced a per-market lookup to fix. MSFT34 and MSFT are the
+    same company; a P/E of 28.04 read RED on one and YELLOW on the other purely
+    because of which exchange the paper traded on."""
+    priced = snapshot.model_copy(update={"pe": MSFT34_PE})
+    bdr = build_stock(LynchCategory.STALWART, market=Market.B3, foreign_business=True)
+    us = build_stock(LynchCategory.STALWART, market=Market.NASDAQ)
+
+    assert signals_by_name(evaluate(bdr, priced))["P/E"] is Signal.YELLOW
+    assert signals_by_name(evaluate(us, priced))["P/E"] is Signal.YELLOW
+
+
+def test_a_brazilian_company_keeps_the_stricter_band(snapshot: DailySnapshot) -> None:
+    """The other half of the rule: INBR32 is a BDR too, but Banco Inter's earnings
+    are Brazilian and must be judged against Brazilian rates. The same 28.04 that
+    is unremarkable for Microsoft is expensive for a Brazilian bank."""
+    priced = snapshot.model_copy(update={"pe": MSFT34_PE})
+    domestic = build_stock(LynchCategory.STALWART, market=Market.B3, foreign_business=False)
+
+    assert signals_by_name(evaluate(domestic, priced))["P/E"] is Signal.RED

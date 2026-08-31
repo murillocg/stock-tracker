@@ -9,7 +9,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from shared.categories.signals import Check, Signal
-from shared.models import DailySnapshot, Market
+from shared.models import DailySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,12 +30,9 @@ PEG_BAND = Band(green=Decimal("1"), yellow=Decimal("1.5"))
 GROWTH_BAND = Band(green=Decimal("20"), yellow=Decimal("10"), lower_is_better=False)
 
 # --- STALWART: pay a fair price for steady quality ----------------------------
-STALWART_PE_BANDS: dict[Market, Band] = {
-    Market.B3: Band(green=Decimal("15"), yellow=Decimal("25")),
-    Market.NYSE: Band(green=Decimal("25"), yellow=Decimal("35")),
-    Market.NASDAQ: Band(green=Decimal("25"), yellow=Decimal("35")),
-}
-"""P/E limits per market, because a multiple is not comparable across them.
+BRAZILIAN_PE_BAND = Band(green=Decimal("15"), yellow=Decimal("25"))
+INTERNATIONAL_PE_BAND = Band(green=Decimal("25"), yellow=Decimal("35"))
+"""P/E limits by where the BUSINESS is, not where the ticker trades.
 
 A P/E is roughly 1 / (discount rate - growth), and the discount rate is set by
 the local risk-free rate. Brazil's Selic runs in double digits; US Treasuries are
@@ -45,16 +42,19 @@ BBDC3 at 6.55 is genuinely cheap while MSFT at 28.64 is unremarkable.
 Judging both against a single band would mark half the US portfolio as expensive
 and flatter the Brazilian half, in a way that looks like analysis but is really
 just a currency of measurement error.
+
+Keyed on the business rather than the listing because of BDRs. MSFT34 is a
+B3-listed receipt for Microsoft: its earnings are American and its multiple has
+to be read against American rates. Judged by its listing it scored RED at a P/E
+of 28.04 while MSFT itself scored YELLOW at 28.64 — the same company, opposite
+verdicts, decided by which exchange the paper trades on.
 """
 
-DEFAULT_PE_BAND = STALWART_PE_BANDS[Market.B3]
-"""Used if a market is ever added without its own band. Deliberately the
-stricter one: a new market silently inheriting a lenient limit would be worse
-than one that reads as too harsh and gets noticed."""
 
-
-def stalwart_pe_band(market: Market) -> Band:
-    return STALWART_PE_BANDS.get(market, DEFAULT_PE_BAND)
+def stalwart_pe_band(is_foreign: bool) -> Band:
+    """The band to judge a P/E against. `Stock.is_foreign` is the input, so a BDR
+    is measured against the country its earnings come from."""
+    return INTERNATIONAL_PE_BAND if is_foreign else BRAZILIAN_PE_BAND
 
 
 STALWART_ROE_BAND = Band(green=Decimal("15"), yellow=Decimal("10"), lower_is_better=False)
