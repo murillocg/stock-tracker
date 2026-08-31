@@ -22,6 +22,9 @@ backend/build/
 *.tfvars
 # Holds the state bucket name, which embeds the AWS account id.
 infra/backend.hcl
+# A saved plan: a binary snapshot of proposed changes, and it can carry values
+# from the state. Regenerate with `terraform plan -out=tfplan`.
+infra/tfplan
 
 # Node / Vite
 node_modules/
