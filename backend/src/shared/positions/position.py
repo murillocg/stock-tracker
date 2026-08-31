@@ -1,6 +1,7 @@
 """Fold a transaction ledger into a position. Pure: data in, data out."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from shared.models import CamelModel, Currency
@@ -87,6 +88,114 @@ class LedgerError(ValueError):
     """The ledger cannot be folded — it describes something impossible."""
 
 
+@dataclass(frozen=True, slots=True)
+class _State:
+    """The running total mid-fold, before it is rounded for display."""
+
+    quantity: Decimal = Decimal(0)
+    average: Decimal = Decimal(0)
+    realised: Decimal = Decimal(0)
+
+
+def _apply(ticker: str, currency: Currency, state: _State, t: Transaction) -> _State:
+    """Advance the fold by one transaction. The rules live here and only here.
+
+    Extracted so `build_position` and `running` cannot drift: the second would
+    otherwise be a copy of the averaging rules, and a copy of the Brazilian
+    average is exactly the kind of thing that stays subtly wrong for months.
+    """
+    if t.currency is not currency:
+        raise LedgerError(
+            f"{ticker} has trades in both {currency} and {t.currency}; "
+            "a single position cannot span two currencies."
+        )
+
+    if t.type is TransactionType.TRANSFER_OUT:
+        # Leaves at cost: no gain is realised, and the average of whatever stays
+        # behind is unchanged.
+        if t.quantity > state.quantity:
+            raise LedgerError(
+                f"{ticker}: transferring {t.quantity} out on "
+                f"{t.date} but only {state.quantity} held."
+            )
+        return _State(state.quantity - t.quantity, state.average, state.realised)
+
+    if t.type is TransactionType.BONUS or (
+        t.type is TransactionType.TRANSFER_IN and t.unit_price == 0
+    ):
+        # Free shares: the amount invested does not move, so dividing it over a
+        # larger quantity lowers the average by itself. A 2:1 split is exactly
+        # "as many free shares as you already hold".
+        invested = state.quantity * state.average
+        quantity = state.quantity + t.quantity
+        return _State(quantity, invested / quantity, state.realised)
+
+    if t.type in (TransactionType.BUY, TransactionType.TRANSFER_IN):
+        cost = state.quantity * state.average + t.quantity * t.unit_price
+        quantity = state.quantity + t.quantity
+        return _State(quantity, cost / quantity, state.realised)
+
+    if t.quantity > state.quantity:
+        raise LedgerError(
+            f"{ticker}: selling {t.quantity} on {t.date} but only {state.quantity} held. "
+            "A missing buy, or a split that was not adjusted for."
+        )
+    return _State(
+        state.quantity - t.quantity,
+        state.average,
+        state.realised + (t.unit_price - state.average) * t.quantity,
+    )
+
+
+def _to_position(ticker: str, currency: Currency, state: _State) -> Position:
+    closed = state.quantity == 0
+    return Position(
+        ticker=ticker,
+        currency=currency,
+        quantity=_tidy(state.quantity),
+        average_price=None if closed else state.average.quantize(MONEY, rounding=ROUND_HALF_UP),
+        invested=(state.quantity * state.average).quantize(MONEY, rounding=ROUND_HALF_UP),
+        realised_gain=state.realised.quantize(MONEY, rounding=ROUND_HALF_UP),
+    )
+
+
+class LedgerEntry(CamelModel):
+    """One transaction and the position it produced.
+
+    `position` is `None` for rows before the last flat point: they are real
+    trades and belong on screen, but they do not bear on today's average, and
+    showing a running total across a reset would imply a continuity that is not
+    there.
+    """
+
+    transaction: Transaction
+    position: Position | None
+
+
+def running(ticker: str, transactions: Sequence[Transaction]) -> list[LedgerEntry]:
+    """Every transaction, oldest first, each with the position after it.
+
+    This is the fold made visible — the answer to "how did the average get to
+    68.06?", which a single number cannot give you.
+    """
+    ordered = sorted(transactions, key=lambda t: (t.date, t.sequence, t.id))
+    if not ordered:
+        return []
+
+    # `since_last_flat` returns a suffix, so its length locates the reset.
+    start = len(ordered) - len(since_last_flat(ordered))
+    currency = ordered[start].currency if start < len(ordered) else ordered[0].currency
+
+    entries = [LedgerEntry(transaction=t, position=None) for t in ordered[:start]]
+    state = _State()
+    for transaction in ordered[start:]:
+        state = _apply(ticker, currency, state, transaction)
+        entries.append(
+            LedgerEntry(transaction=transaction, position=_to_position(ticker, currency, state))
+        )
+    return entries
+
+
 def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position | None:
     """Fold trades, oldest first, into the current position.
 
@@ -116,59 +225,8 @@ def build_position(ticker: str, transactions: Sequence[Transaction]) -> Position
     ordered = sorted(transactions, key=lambda t: (t.date, t.sequence, t.id))
     currency = ordered[0].currency
 
-    quantity = Decimal(0)
-    average = Decimal(0)
-    realised = Decimal(0)
-
+    state = _State()
     for transaction in ordered:
-        if transaction.currency is not currency:
-            raise LedgerError(
-                f"{ticker} has trades in both {currency} and {transaction.currency}; "
-                "a single position cannot span two currencies."
-            )
+        state = _apply(ticker, currency, state, transaction)
 
-        if transaction.type is TransactionType.TRANSFER_OUT:
-            # Leaves at cost: no gain is realised, and the average of whatever
-            # stays behind is unchanged.
-            if transaction.quantity > quantity:
-                raise LedgerError(
-                    f"{ticker}: transferring {transaction.quantity} out on "
-                    f"{transaction.date} but only {quantity} held."
-                )
-            quantity -= transaction.quantity
-            continue
-
-        if transaction.type is TransactionType.BONUS or (
-            transaction.type is TransactionType.TRANSFER_IN and transaction.unit_price == 0
-        ):
-            # Free shares: the amount invested does not move, so dividing it over
-            # a larger quantity lowers the average by itself. A 2:1 split is
-            # exactly "as many free shares as you already hold".
-            invested = quantity * average
-            quantity += transaction.quantity
-            average = invested / quantity
-            continue
-
-        if transaction.type in (TransactionType.BUY, TransactionType.TRANSFER_IN):
-            cost = quantity * average + transaction.quantity * transaction.unit_price
-            quantity += transaction.quantity
-            average = cost / quantity
-            continue
-
-        if transaction.quantity > quantity:
-            raise LedgerError(
-                f"{ticker}: selling {transaction.quantity} on {transaction.date} but only "
-                f"{quantity} held. A missing buy, or a split that was not adjusted for."
-            )
-        realised += (transaction.unit_price - average) * transaction.quantity
-        quantity -= transaction.quantity
-
-    closed = quantity == 0
-    return Position(
-        ticker=ticker,
-        currency=currency,
-        quantity=_tidy(quantity),
-        average_price=None if closed else average.quantize(MONEY, rounding=ROUND_HALF_UP),
-        invested=(quantity * average).quantize(MONEY, rounding=ROUND_HALF_UP),
-        realised_gain=realised.quantize(MONEY, rounding=ROUND_HALF_UP),
-    )
+    return _to_position(ticker, currency, state)
