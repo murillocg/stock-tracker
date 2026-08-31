@@ -103,10 +103,29 @@ export interface StockView {
   sector: string | null
   category: LynchCategory | null
   listType: 'PORTFOLIO' | 'WATCHLIST'
+  /** Where the business is, not where the ticker trades — MSFT34 is foreign. */
+  isForeign: boolean
   current: Snapshot | null
   evaluation: Evaluation
   position: Position | null
   valuation: Valuation | null
+}
+
+export interface Transaction {
+  ticker: string
+  date: string
+  type: 'BUY' | 'SELL' | 'BONUS' | 'TRANSFER_IN' | 'TRANSFER_OUT'
+  quantity: string
+  unitPrice: string
+  currency: string
+  broker: string | null
+  note: string | null
+}
+
+export interface LedgerEntry {
+  transaction: Transaction
+  /** The position after this trade. Null before the last flat point. */
+  position: Position | null
 }
 
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
@@ -128,7 +147,9 @@ export function listStocks(listType?: 'PORTFOLIO' | 'WATCHLIST') {
 }
 
 export function getStock(ticker: string, days = 90) {
-  return get<{ stock: StockView; history: Snapshot[] }>(`/stocks/${ticker}?days=${days}`)
+  return get<{ stock: StockView; history: Snapshot[]; ledger: LedgerEntry[] }>(
+    `/stocks/${ticker}?days=${days}`,
+  )
 }
 
 /** Format a Decimal-as-string for display, without ever parsing it to a float. */
@@ -136,6 +157,24 @@ export function brl(value: string): string {
   const [whole = '0', fraction = '00'] = value.split('.')
   const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   return `${grouped},${fraction.slice(0, 2)}`
+}
+
+/**
+ * Add Decimal strings exactly, via integer cents.
+ *
+ * The API sends Decimals as text precisely so they are never float64, and
+ * `0.1 + 0.2 === 0.30000000000000004` is what would leak into a section
+ * subtotal. Cents are integers, and a portfolio would need to pass R$90
+ * trillion before it reached the limit of an exact integer in JavaScript.
+ */
+export function sumDecimals(values: string[]): string {
+  const cents = values.reduce((total, value) => {
+    const [whole = '0', fraction = ''] = value.split('.')
+    const magnitude = Math.abs(Number(whole)) * 100 + Number((fraction + '00').slice(0, 2))
+    return total + (whole.startsWith('-') ? -magnitude : magnitude)
+  }, 0)
+  const abs = Math.abs(cents)
+  return `${cents < 0 ? '-' : ''}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`
 }
 
 /** Sign of a Decimal string, judged textually — no float conversion involved. */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { bySignal, listStocks, type PortfolioTotals, type StockView } from '@/api'
+import { brl, bySignal, listStocks, sumDecimals, type PortfolioTotals, type StockView } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import PortfolioSummary from '@/components/PortfolioSummary.vue'
@@ -49,6 +49,28 @@ const sorted = computed(() => {
   })
 })
 
+function subtotal(group: StockView[]) {
+  const pick = (get: (s: StockView) => string | null | undefined) =>
+    group.map(get).filter((v): v is string => typeof v === 'string')
+  return {
+    value: sumDecimals(pick((s) => s.valuation?.baseMarketValue)),
+    weight: sumDecimals(pick((s) => s.valuation?.weight)),
+  }
+}
+
+// Split by where the BUSINESS is, not where the ticker trades. That is what puts
+// MSFT34 beside MSFT instead of beside VALE3 — you hold Microsoft twice, and a
+// split by listing would hide it across two sections. It also keeps INBR32 on the
+// Brazilian side, where Banco Inter belongs, despite being a BDR like the others.
+const groups = computed(() =>
+  [
+    { key: 'BR', title: 'Brazilian', stocks: sorted.value.filter((s) => !s.isForeign) },
+    { key: 'INTL', title: 'International', stocks: sorted.value.filter((s) => s.isForeign) },
+  ]
+    .filter((group) => group.stocks.length > 0)
+    .map((group) => ({ ...group, ...subtotal(group.stocks) })),
+)
+
 const collected = computed(() => sorted.value.find((s) => s.current)?.current?.date ?? null)
 </script>
 
@@ -73,16 +95,38 @@ const collected = computed(() => sorted.value.find((s) => s.current)?.current?.d
     <p v-else-if="error" class="state error">{{ error }}</p>
     <p v-else-if="!sorted.length" class="state">Nothing here yet.</p>
 
-    <RouterLink v-for="stock in sorted" :key="stock.ticker" :to="`/stocks/${stock.ticker}`">
-      <article class="card">
-        <div class="card-head">
-          <SignalDot :signal="stock.evaluation.signal" />
-          <span class="ticker">{{ stock.ticker }}</span>
-          <span class="name">{{ stock.name }}</span>
-          <span class="labels">
-            <span v-if="stock.sector" class="sector">{{ stock.sector }}</span>
-            <CategoryLabel :category="stock.category" />
-          </span>
+    <section v-for="group in groups" :key="group.key" class="group">
+      <header class="group-head">
+        <h2>{{ group.title }}</h2>
+        <span class="subtle">
+          {{ group.stocks.length }} &middot; R$ {{ brl(group.value) }} &middot;
+          {{ group.weight }}% of the portfolio
+        </span>
+      </header>
+
+      <RouterLink
+        v-for="stock in group.stocks"
+        :key="stock.ticker"
+        :to="`/stocks/${stock.ticker}`"
+        class="row"
+      >
+        <SignalDot :signal="stock.evaluation.signal" />
+        <span class="ticker">{{ stock.ticker }}</span>
+        <CategoryLabel :category="stock.category" />
+
+        <HoldingFigures
+          :position="stock.position"
+          :valuation="stock.valuation"
+          :currency="stock.currency"
+          compact
+        />
+
+        <!-- Chips only. The explanations live on the detail page, one click
+             away: this screen is for comparing twenty holdings, not reading
+             about one. -->
+        <CheckChips :checks="stock.evaluation.checks" :with-reasons="false" />
+
+        <span class="row-end">
           <span v-if="stock.current" class="price">
             <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
             {{ stock.current.price }}
@@ -92,14 +136,8 @@ const collected = computed(() => sorted.value.find((s) => s.current)?.current?.d
             {{ stock.valuation.weight }}<small>%</small>
           </span>
           <span v-else class="weight is-empty">—</span>
-        </div>
-        <HoldingFigures
-          :position="stock.position"
-          :valuation="stock.valuation"
-          :currency="stock.currency"
-        />
-        <CheckChips :checks="stock.evaluation.checks" />
-      </article>
-    </RouterLink>
+        </span>
+      </RouterLink>
+    </section>
   </div>
 </template>

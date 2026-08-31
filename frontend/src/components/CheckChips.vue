@@ -3,7 +3,10 @@ import { computed } from 'vue'
 import type { Check } from '@/api'
 import SignalDot from './SignalDot.vue'
 
-const props = defineProps<{ checks: Check[] }>()
+const props = withDefaults(
+  defineProps<{ checks: Check[]; withReasons?: boolean }>(),
+  { withReasons: true },
+)
 
 // NOT_APPLICABLE and INSUFFICIENT_DATA are dimmed rather than hidden: knowing a
 // check did not apply is itself information, and hiding it would make the card
@@ -11,10 +14,22 @@ const props = defineProps<{ checks: Check[] }>()
 const isMuted = (check: Check) =>
   check.signal === 'NOT_APPLICABLE' || check.signal === 'INSUFFICIENT_DATA'
 
-// Reasons are shown for everything that is NOT plainly fine. A green card stays
-// quiet; anything asking for attention says why, on the card, rather than behind
-// a hover the user has to discover.
-const reasons = computed(() => props.checks.filter((check) => check.signal !== 'GREEN'))
+// The prose belongs on the detail page. The portfolio list answers "where does
+// this month's money go?", which is a comparison — and prose cannot be compared,
+// only read one card at a time. The chips carry the same verdict in a form you
+// can scan across twenty holdings, and the full text is still one click away.
+//
+// INSUFFICIENT_DATA is dropped from the reasons even on the detail page: "not
+// available from any free source" is a fact about our providers, not a finding
+// about the company, and repeating it under every US holding taught the eye to
+// skip the whole block.
+const reasons = computed(() =>
+  props.withReasons
+    ? props.checks.filter(
+        (check) => check.signal !== 'GREEN' && check.signal !== 'INSUFFICIENT_DATA',
+      )
+    : [],
+)
 </script>
 
 <template>
