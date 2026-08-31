@@ -4,6 +4,7 @@ Separate from `indicators`, which is about what the market says of a company.
 This is about what you own of it.
 """
 
+from shared.positions.exchange import ExchangeRates
 from shared.positions.position import (
     LedgerError,
     Position,
@@ -14,6 +15,7 @@ from shared.positions.position import (
 from shared.positions.valuation import Valuation, value, with_weights
 
 __all__ = [
+    "ExchangeRates",
     "LedgerError",
     "Position",
     "Valuation",

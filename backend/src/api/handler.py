@@ -29,7 +29,7 @@ from api.responses import (
 from shared.categories import evaluate
 from shared.config import Config
 from shared.models import Currency, ListType, Stock
-from shared.positions import Valuation, current_position, value, with_weights
+from shared.positions import ExchangeRates, Valuation, current_position, value, with_weights
 from shared.repository import (
     DynamoDbSnapshotRepository,
     DynamoDbStockRepository,
@@ -50,15 +50,36 @@ stops a crafted `?days=99999` from scanning a ticker's entire history."""
 BASE_CURRENCY = Currency.BRL
 """The currency the portfolio is totalled in.
 
-Holdings priced in anything else are excluded from the totals and carry no
-weight. Including them without an exchange rate would not be an approximation —
-it would be adding unlike things. Collecting USDBRL is what removes this limit.
+Each row keeps its own currency — MSFT stays in dollars — and only the totals and
+the weights are expressed here. Holdings whose currency has no collected rate are
+still excluded and counted as `unpriced`.
 """
+
+FX_TICKER = "USDBRL"
+"""The USD/BRL rate, collected daily from the Banco Central and stored as an
+ordinary REFERENCE row. It is a price like any other, so it needs no special
+table, no special collector path, and it gets the same history for free."""
+
+
+def exchange_rates(stocks: StockRepository) -> ExchangeRates:
+    """Assemble today's rates from the REFERENCE rows.
+
+    A missing or never-collected rate yields an empty table rather than an error:
+    the Brazilian side of the portfolio is most of it and must still total up if
+    the FX collection fails. The USD holdings degrade to `weight=None`, exactly
+    as they did before any rate existed.
+    """
+    fx = stocks.get(FX_TICKER)
+    if fx is None or fx.current is None:
+        logger.warning("%s has no snapshot — USD holdings will not be weighted", FX_TICKER)
+        return ExchangeRates(base=BASE_CURRENCY)
+    return ExchangeRates(base=BASE_CURRENCY, rates={Currency.USD: fx.current.price})
 
 
 def build_views(
     stocks: list[Stock],
     transactions: TransactionRepository,
+    rates: ExchangeRates,
 ) -> tuple[list[StockView], PortfolioTotals | None]:
     """Attach a position, a valuation and a weight to each stock.
 
@@ -85,10 +106,11 @@ def build_views(
 
         # A position can only be priced if we have both a price and a way to
         # express it in the base currency.
-        if stock.current is None or stock.currency is not BASE_CURRENCY:
+        rate = rates.rate_for(stock.currency)
+        if stock.current is None or rate is None:
             unpriced += 1
             continue
-        valuations[stock.ticker] = value(position, stock.current.price)
+        valuations[stock.ticker] = value(position, stock.current.price, rate)
 
     valuations = with_weights(valuations)
 
@@ -105,8 +127,10 @@ def build_views(
     if not valuations:
         return views, None
 
-    invested = sum((positions[t].invested for t in valuations), Decimal(0))
-    market = sum((v.market_value for v in valuations.values()), Decimal(0))
+    # The base-currency figures, not the native ones: summing a dollar value into
+    # a real total is the bug this whole conversion exists to prevent.
+    invested = sum((v.base_invested or Decimal(0) for v in valuations.values()), Decimal(0))
+    market = sum((v.base_market_value or Decimal(0) for v in valuations.values()), Decimal(0))
     gain = market - invested
     totals = PortfolioTotals(
         invested=invested,
@@ -143,7 +167,9 @@ def list_stocks(
             return error(400, f"Unknown listType '{raw_list_type}'. Expected one of: {allowed}.")
         found = stocks.list_by_type(list_type)
 
-    views, totals = build_views(sorted(found, key=lambda s: s.ticker), transactions)
+    views, totals = build_views(
+        sorted(found, key=lambda s: s.ticker), transactions, exchange_rates(stocks)
+    )
     return json_response(200, StockListResponse(stocks=views, totals=totals))
 
 
@@ -170,8 +196,11 @@ def get_stock(
 
     rows = transactions.for_ticker(stock.ticker)
     position = current_position(stock.ticker, rows) if rows else None
+    # The rate matters even for a single stock: without it a USD holding's
+    # base figures would come back as its dollar amounts wearing a BRL label.
+    # `weight` stays None here — a share of one is not a share of a portfolio.
     valuation = (
-        value(position, stock.current.price)
+        value(position, stock.current.price, exchange_rates(stocks).rate_for(stock.currency))
         if position and position.quantity > 0 and stock.current
         else None
     )

@@ -359,3 +359,89 @@ def test_the_detail_view_carries_the_position_too() -> None:
 
     assert status == 200
     assert body["stock"]["position"]["invested"] == "4000.00"
+
+
+# --- cross-currency totals ---------------------------------------------------
+
+
+def usd_book() -> tuple[list[Stock], list[Transaction]]:
+    """One BRL holding, one USD holding, and the rate that joins them."""
+    stocks = [
+        build_stock("VALE3", current=build_snapshot("VALE3", TODAY, price=Decimal("50.00"))),
+        build_stock(
+            "MSFT",
+            market=Market.NASDAQ,
+            currency=Currency.USD,
+            quote_provider=ProviderName.ALPHA_VANTAGE,
+            current=build_snapshot("MSFT", TODAY, price=Decimal("450.00")),
+        ),
+        # The rate travels as an ordinary REFERENCE row, not a special case.
+        build_stock(
+            "USDBRL",
+            list_type=ListType.REFERENCE,
+            current=build_snapshot("USDBRL", TODAY, price=Decimal("5.2005")),
+        ),
+    ]
+    transactions = [
+        Transaction(
+            ticker="VALE3",
+            date=TODAY,
+            type=TransactionType.BUY,
+            quantity=Decimal("100"),
+            unit_price=Decimal("50.00"),
+            currency=Currency.BRL,
+            id="v1",
+        ),
+        Transaction(
+            ticker="MSFT",
+            date=TODAY,
+            type=TransactionType.BUY,
+            quantity=Decimal("4"),
+            unit_price=Decimal("443.02"),
+            currency=Currency.USD,
+            id="m1",
+        ),
+    ]
+    return stocks, transactions
+
+
+def test_a_usd_holding_is_weighed_against_the_brazilian_book() -> None:
+    stocks, transactions = usd_book()
+
+    _, body = call("GET /stocks", stocks=stocks, transactions=transactions)
+    by_ticker = {s["ticker"]: s for s in body["stocks"]}
+
+    # The row itself stays in dollars — it has to match what Avenue reports.
+    assert by_ticker["MSFT"]["valuation"]["marketValue"] == "1800.00"
+    # The weight does not: R$9,360.90 against a R$14,360.90 book.
+    assert by_ticker["MSFT"]["valuation"]["weight"] == "65.18"
+    assert by_ticker["VALE3"]["valuation"]["weight"] == "34.82"
+
+    assert body["totals"]["marketValue"] == "14360.90"
+    assert body["totals"]["currency"] == Currency.BRL
+    assert body["totals"]["priced"] == 2
+    assert body["totals"]["unpriced"] == 0
+
+
+def test_without_the_rate_the_usd_holding_drops_out_but_the_book_still_totals() -> None:
+    """The Brazilian side is most of the portfolio and must survive a failed FX
+    collection — degraded, and visibly so, rather than absent or wrong."""
+    stocks, transactions = usd_book()
+    stocks = [s for s in stocks if s.ticker != "USDBRL"]
+
+    _, body = call("GET /stocks", stocks=stocks, transactions=transactions)
+    by_ticker = {s["ticker"]: s for s in body["stocks"]}
+
+    assert by_ticker["MSFT"]["valuation"] is None
+    assert by_ticker["VALE3"]["valuation"]["weight"] == "100.00"
+    assert body["totals"]["marketValue"] == "5000.00"
+    assert body["totals"]["priced"] == 1
+    assert body["totals"]["unpriced"] == 1
+
+
+def test_the_rate_itself_is_never_listed_as_a_holding() -> None:
+    stocks, transactions = usd_book()
+
+    _, body = call("GET /stocks", stocks=stocks, transactions=transactions)
+
+    assert "USDBRL" not in {s["ticker"] for s in body["stocks"]}

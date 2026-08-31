@@ -70,11 +70,19 @@ export interface Position {
 }
 
 export interface Valuation {
+  /** In the STOCK's own currency, so a US row matches what the broker shows. */
   marketValue: string
   unrealisedGain: string
   unrealisedGainPercent: string
-  /** Share of the portfolio. Null when it cannot be priced in the base currency. */
+  /** Share of the portfolio. Null when no exchange rate was collected for it. */
   weight: string | null
+  /** `marketValue` in the portfolio's base currency, at today's rate. */
+  baseMarketValue: string | null
+  /**
+   * `invested` at TODAY's rate — not the cost in reais, which would need the
+   * rate on each purchase date. Do not label this a cost basis.
+   */
+  baseInvested: string | null
 }
 
 export interface PortfolioTotals {
