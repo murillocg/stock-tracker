@@ -3,7 +3,7 @@
 import datetime as dt
 from decimal import Decimal
 
-from pydantic import Field, field_serializer
+from pydantic import Field, computed_field, field_serializer
 
 from shared.models.alert_rule import AlertRule
 from shared.models.base import CamelModel
@@ -47,6 +47,21 @@ class Stock(CamelModel):
     it from a free-text sector string it does not control.
     """
 
+    foreign_business: bool | None = None
+    """Whether the COMPANY is outside Brazil — overriding what the listing implies.
+
+    `None` means infer it from `market`, which is right for all but one case: a
+    BDR is a Brazilian-listed receipt for a foreign company, so MSFT34 trades on
+    the B3 while the business is Microsoft. Those need `True` explicitly.
+
+    It cuts the other way too, which is why this is about the business and not
+    the instrument. INBR32 is a BDR — same ticker shape, same B3 listing — but
+    the company underneath is Banco Inter, a Brazilian bank that happens to hold
+    its listing abroad. Treating "is a BDR" as "is foreign" would file it with
+    Microsoft and TSMC, which is wrong about the only thing that matters here:
+    where the earnings come from.
+    """
+
     list_type: ListType
     alert_rules: dict[AlertType, AlertRule] = Field(default_factory=dict)
 
@@ -72,6 +87,18 @@ class Stock(CamelModel):
     Duplicated storage bought deliberately: rendering the whole portfolio becomes
     one GSI query instead of one query plus N reads against `DailySnapshots`.
     """
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_foreign(self) -> bool:
+        """Where the business is, for grouping the portfolio.
+
+        Computed rather than stored so the 20 ordinary holdings need no data at
+        all — only the handful whose listing misrepresents them carry a value.
+        """
+        if self.foreign_business is not None:
+            return self.foreign_business
+        return self.market is not Market.B3
 
     @field_serializer("manual_updated_on")
     def _serialise_manual_updated_on(self, value: dt.date | None) -> str | None:

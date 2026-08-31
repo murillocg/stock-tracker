@@ -101,3 +101,44 @@ def test_the_default_alert_map_is_not_shared_between_instances() -> None:
 
 def test_lynch_categories_cover_the_six_types() -> None:
     assert len(LynchCategory) == 6
+
+
+# --- where the business is ---------------------------------------------------
+
+
+def build(ticker: str, **values: object) -> Stock:
+    return Stock.model_validate(
+        {
+            "ticker": ticker,
+            "name": ticker,
+            "market": Market.B3,
+            "currency": Currency.BRL,
+            "quote_provider": ProviderName.BRAPI,
+            "list_type": ListType.PORTFOLIO,
+            **values,
+        }
+    )
+
+
+def test_a_b3_listing_is_brazilian_by_default() -> None:
+    assert build("VALE3").is_foreign is False
+
+
+def test_a_us_listing_is_foreign_by_default() -> None:
+    assert build("MSFT", market=Market.NASDAQ).is_foreign is True
+
+
+def test_a_bdr_of_a_foreign_company_overrides_its_listing() -> None:
+    """MSFT34 trades on the B3; the business is Microsoft."""
+    assert build("MSFT34", foreign_business=True).is_foreign is True
+
+
+def test_a_bdr_of_a_brazilian_company_stays_brazilian() -> None:
+    """INBR32 has the same shape as MSFT34 and the opposite answer — Banco Inter
+    is a Brazilian bank. This is why the flag is about the business, not the
+    instrument."""
+    assert build("INBR32", foreign_business=False).is_foreign is False
+
+
+def test_it_is_serialised_for_the_frontend() -> None:
+    assert build("MSFT", market=Market.NASDAQ).model_dump(by_alias=True)["isForeign"] is True
