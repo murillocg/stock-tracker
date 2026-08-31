@@ -96,8 +96,10 @@ const groups = computed(() =>
       <button :aria-pressed="tab === 'PORTFOLIO'" @click="tab = 'PORTFOLIO'">Portfolio</button>
       <button :aria-pressed="tab === 'WATCHLIST'" @click="tab = 'WATCHLIST'">Watchlist</button>
       <span class="spacer" />
-      <button :aria-pressed="order === 'weight'" @click="order = 'weight'">By weight</button>
-      <button :aria-pressed="order === 'signal'" @click="order = 'signal'">By signal</button>
+      <!-- Named by direction, not by field: "By signal" did not say which end
+           it put first, and it guessed wrong. -->
+      <button :aria-pressed="order === 'weight'" @click="order = 'weight'">Largest first</button>
+      <button :aria-pressed="order === 'signal'" @click="order = 'signal'">Best first</button>
     </nav>
 
     <PortfolioSummary v-if="totals" :totals="totals" />

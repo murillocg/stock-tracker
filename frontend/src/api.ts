@@ -228,12 +228,23 @@ export function isNegative(value: string): boolean {
 }
 
 /** Rank for sorting: the things needing attention first, the fine ones last. */
+// Best first. This screen answers "where does this month's money go?", so the
+// buy candidates belong at the top; hunting for them past twelve reds was the
+// list working against the decision it exists for.
+//
+// The first four mirror `_SEVERITY` in shared/categories/signals.py exactly,
+// which is what makes NEEDS_REVIEW rank better than RED — "go and look at this"
+// is a milder verdict than a clear red flag.
+//
+// INSUFFICIENT_DATA and NOT_APPLICABLE are appended rather than ranked: neither
+// is a degree of goodness, and a holding we cannot judge is not a candidate for
+// this month's contribution. They sort last so they stay out of the way.
 const SIGNAL_ORDER: Record<Signal, number> = {
-  RED: 0,
+  GREEN: 0,
   YELLOW: 1,
   NEEDS_REVIEW: 2,
-  INSUFFICIENT_DATA: 3,
-  GREEN: 4,
+  RED: 3,
+  INSUFFICIENT_DATA: 4,
   NOT_APPLICABLE: 5,
 }
 
