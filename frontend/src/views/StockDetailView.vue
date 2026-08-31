@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
+import { brl, getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -71,7 +71,7 @@ const CHANGES = [
           </span>
           <span v-if="stock.current" class="price">
             <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
-            {{ stock.current.price }}
+            {{ brl(stock.current.price) }}
           </span>
         </div>
         <HoldingFigures
@@ -119,8 +119,8 @@ const CHANGES = [
             <header class="group-head">
               <h2>{{ ledger.broker ?? 'no broker recorded' }}</h2>
               <span v-if="ledger.position" class="subtle">
-                {{ ledger.position.quantity }} @ {{ ledger.position.averagePrice }}
-                &middot; {{ ledger.position.invested }} invested
+                {{ ledger.position.quantity }} @ {{ brl(ledger.position.averagePrice ?? '0') }}
+                &middot; {{ brl(ledger.position.invested) }} invested
               </span>
               <span v-else class="subtle">closed &mdash; nothing held here now</span>
             </header>
@@ -152,11 +152,15 @@ const CHANGES = [
                   <td>{{ entry.transaction.type.toLowerCase().replace('_', ' ') }}</td>
                   <td class="num">{{ entry.transaction.quantity }}</td>
                   <td class="num">
-                    {{ entry.transaction.unitPrice === '0' ? '—' : entry.transaction.unitPrice }}
+                    {{ entry.transaction.unitPrice === '0' ? '—' : brl(entry.transaction.unitPrice) }}
                   </td>
                   <td class="num">{{ entry.position?.quantity ?? '—' }}</td>
-                  <td class="num"><b>{{ entry.position?.averagePrice ?? '—' }}</b></td>
-                  <td class="num">{{ entry.position?.invested ?? '—' }}</td>
+                  <td class="num">
+                    <b>{{ entry.position ? brl(entry.position.averagePrice ?? '0') : '—' }}</b>
+                  </td>
+                  <td class="num">
+                    {{ entry.position ? brl(entry.position.invested) : '—' }}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -170,7 +174,7 @@ const CHANGES = [
               v-else-if="ledger.position && ledger.position.realisedGain !== '0.00'"
               class="subtle footnote"
             >
-              Realised gain here: {{ ledger.position.realisedGain }} — booked on sales,
+              Realised gain here: {{ brl(ledger.position.realisedGain) }} — booked on sales,
               and not part of the average.
             </p>
           </section>
@@ -186,7 +190,7 @@ const CHANGES = [
             <tbody>
               <tr v-for="row in history" :key="row.date">
                 <td>{{ row.date }}</td>
-                <td>{{ row.price }}</td>
+                <td>{{ brl(row.price) }}</td>
                 <td>{{ row.pe ?? '—' }}</td>
                 <td>{{ row.pb ?? '—' }}</td>
                 <td>{{ row.roe ?? '—' }}</td>

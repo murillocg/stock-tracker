@@ -175,9 +175,22 @@ export function getStock(ticker: string, days = 90) {
 
 /** Format a Decimal-as-string for display, without ever parsing it to a float. */
 export function brl(value: string): string {
-  const [whole = '0', fraction = '00'] = value.split('.')
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-  return `${grouped},${fraction.slice(0, 2)}`
+  const trimmed = value.trim()
+  const negative = trimmed.startsWith('-')
+  const [whole = '0', fraction = ''] = trimmed.replace(/^[-+]/, '').split('.')
+
+  // Rounded to cents in integer arithmetic, never through a float — and always
+  // padded to two places. The old version sliced the fraction, so a price of
+  // "13.1" rendered as "13,1" and "8.0864" silently became "8,08": one looks
+  // like a typo, the other is wrong by a rounding.
+  const digits = (fraction + '000').slice(0, 3)
+  let cents = Number(whole) * 100 + Number(digits.slice(0, 2))
+  if (Number(digits[2]) >= 5) cents += 1
+
+  const size = Math.abs(cents)
+  const reais = String(Math.floor(size / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  const sign = negative && cents !== 0 ? '-' : ''
+  return `${sign}${reais},${String(size % 100).padStart(2, '0')}`
 }
 
 /**

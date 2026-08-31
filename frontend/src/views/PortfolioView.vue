@@ -143,7 +143,7 @@ const groups = computed(() =>
         <span class="row-end">
           <span v-if="stock.current" class="price">
             <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
-            {{ stock.current.price }}
+            {{ brl(stock.current.price) }}
           </span>
           <span v-else class="price is-empty">—</span>
           <span v-if="stock.valuation?.weight" class="weight">
