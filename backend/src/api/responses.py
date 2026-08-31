@@ -3,6 +3,8 @@
 from decimal import Decimal
 from typing import Any
 
+from pydantic import Field
+
 from shared.categories import Evaluation
 from shared.models import (
     CamelModel,
@@ -14,7 +16,7 @@ from shared.models import (
     Stock,
 )
 from shared.models.types import Ticker
-from shared.positions import Position, Valuation
+from shared.positions import LedgerEntry, Position, Valuation
 
 
 class StockView(CamelModel):
@@ -32,6 +34,10 @@ class StockView(CamelModel):
     sector: str | None
     category: LynchCategory | None
     list_type: ListType
+    is_foreign: bool
+    """Groups the list into Brazilian and international. Comes from the business,
+    not the listing, so the BDRs sit with the companies they track."""
+
     current: DailySnapshot | None
     evaluation: Evaluation
 
@@ -59,6 +65,7 @@ class StockView(CamelModel):
             sector=stock.sector,
             category=stock.category,
             list_type=stock.list_type,
+            is_foreign=stock.is_foreign,
             current=stock.current,
             evaluation=evaluation,
             position=position,
@@ -90,10 +97,17 @@ class StockListResponse(CamelModel):
 
 
 class StockDetailResponse(CamelModel):
-    """GET /stocks/{ticker} — the stock plus enough history to draw a line."""
+    """GET /stocks/{ticker} — the stock, its price history, and its ledger."""
 
     stock: StockView
     history: list[DailySnapshot]
+
+    ledger: list[LedgerEntry] = Field(default_factory=list)
+    """Every transaction with the position after it, oldest first.
+
+    Sent whole rather than summarised because the average price is the one figure
+    here that cannot be checked by eye — it is the output of a fold, and the only
+    way to trust it is to watch it move trade by trade."""
 
 
 class ErrorResponse(CamelModel):

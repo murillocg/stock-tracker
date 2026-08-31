@@ -29,7 +29,14 @@ from api.responses import (
 from shared.categories import evaluate
 from shared.config import Config
 from shared.models import Currency, ListType, Stock
-from shared.positions import ExchangeRates, Valuation, current_position, value, with_weights
+from shared.positions import (
+    ExchangeRates,
+    Valuation,
+    current_position,
+    running,
+    value,
+    with_weights,
+)
 from shared.repository import (
     DynamoDbSnapshotRepository,
     DynamoDbStockRepository,
@@ -210,6 +217,7 @@ def get_stock(
         StockDetailResponse(
             stock=StockView.of(stock, evaluate(stock), position=position, valuation=valuation),
             history=history,
+            ledger=running(stock.ticker, rows),
         ),
     )
 
