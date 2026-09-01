@@ -42,6 +42,33 @@ const rowCount = computed(() =>
 const preReset = (ledger: BrokerLedger) =>
   ledger.entries.filter((entry) => entry.position === null).length
 
+// Every indicator the snapshot can carry, in the order they belong on screen:
+// valuation, then returns, then leverage, then margins, then growth. The table
+// showed three of these and hid the other eight for no reason.
+const INDICATORS = [
+  ['price', 'price'],
+  ['pe', 'P/E'],
+  ['pb', 'P/B'],
+  ['evEbitda', 'EV/EBITDA'],
+  ['roe', 'ROE'],
+  ['roic', 'ROIC'],
+  ['netDebtToEbitda', 'Net debt/EBITDA'],
+  ['grossMargin', 'Gross margin'],
+  ['ebitdaMargin', 'EBITDA margin'],
+  ['dividendYield', 'Div. yield'],
+  ['payoutRatio', 'Payout'],
+  ['peg', 'PEG'],
+  ['revenueCagr5y', 'Rev. CAGR 5y'],
+  ['earningsCagr5y', 'Earn. CAGR 5y'],
+] as const satisfies readonly (readonly [keyof Snapshot, string])[]
+
+// Only the columns this stock actually has. A B3 stock carries eleven of these
+// and a US one carries five; a fixed table would give every US stock six columns
+// of dashes, which reads as broken data rather than a different provider.
+const columns = computed(() =>
+  INDICATORS.filter(([key]) => history.value.some((row) => row[key] !== null)),
+)
+
 const CHANGES = [
   ['1w', 'change1w'],
   ['1m', 'change1m'],
@@ -183,20 +210,24 @@ const CHANGES = [
         </template>
 
         <template v-else>
-          <table v-if="history.length" class="history">
-            <thead>
-              <tr><th>date</th><th>price</th><th>P/E</th><th>P/B</th><th>ROE</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in history" :key="row.date">
-                <td>{{ row.date }}</td>
-                <td>{{ brl(row.price) }}</td>
-                <td>{{ row.pe ?? '—' }}</td>
-                <td>{{ row.pb ?? '—' }}</td>
-                <td>{{ row.roe ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="history.length" class="scroller">
+            <table class="history">
+              <thead>
+                <tr>
+                  <th>date</th>
+                  <th v-for="[key, label] in columns" :key="key" class="num">{{ label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in history" :key="row.date">
+                  <td>{{ row.date }}</td>
+                  <td v-for="[key] in columns" :key="key" class="num">
+                    {{ key === 'price' ? brl(row.price) : (row[key] ?? '—') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="subtle">
             Nothing yet. The collector runs once each weekday evening.
           </p>

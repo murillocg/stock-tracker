@@ -14,6 +14,11 @@
   --review: #7d4ed8;
   --unknown: #8c95a1;
 
+  /* Not a signal colour. Used where a number is fine but unremarkable — a
+     headroom sitting just above target — so it does not borrow green's meaning. */
+  --accent: #2f5d8a;
+  --sunken: #eceff3;
+
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
 }
@@ -240,26 +245,79 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
    chips got wide, which destroyed the column alignment the row exists for. */
 .row {
   display: grid;
-  grid-template-columns: auto minmax(3.5rem, auto) auto 1fr auto;
   align-items: center;
   column-gap: .7rem;
   row-gap: .25rem;
-  flex-wrap: nowrap;
 }
-.row .checks { grid-column: 4; justify-self: start; }
-.row .figures { grid-column: 4; justify-self: start; }
-.row .row-end { grid-column: 5; }
 
-/* Two things want column 4. Give the figures their own row beneath the chips
-   rather than fighting over it, and let narrow screens stack the whole thing. */
-@media (min-width: 900px) {
-  .row { grid-template-columns: auto minmax(3.5rem, auto) auto auto 1fr auto; }
-  .row .figures { grid-column: 4; }
-  .row .checks { grid-column: 5; }
-  .row .row-end { grid-column: 6; }
+/* Decide: fixed tracks, so every column lines up down the list. That alignment
+   is the entire reason this view exists — twenty rows you can read as columns
+   instead of twenty rows you have to re-parse one at a time. */
+.row.decide, .head-row {
+  grid-template-columns: 14px minmax(4.4rem, auto) minmax(6.5rem, auto) 1fr repeat(4, 4.6rem);
 }
-@media (max-width: 640px) {
-  .row { grid-template-columns: auto 1fr auto; }
-  .row .figures, .row .checks { grid-column: 1 / -1; }
-  .row .row-end { grid-column: 3; grid-row: 1; }
+.row.decide .cell, .head-row .cell { text-align: right; }
+
+/* Review: the fuller row, where figures and chips take the flexible middle. */
+.row.review { grid-template-columns: 14px minmax(4.4rem, auto) auto auto 1fr auto; }
+.row.review .figures { grid-column: 4; justify-self: start; }
+.row.review .checks { grid-column: 5; justify-self: start; }
+.row.review .row-end { grid-column: 6; }
+
+.head-row { padding: .35rem .25rem; border-bottom: 1px solid var(--border); }
+.head-row:hover { background: transparent; }
+.col-head, .sortable {
+  font-size: .7rem;
+  letter-spacing: .04em;
+  text-transform: lowercase;
+  color: var(--muted);
+  text-align: right;
 }
+.sortable {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: .7rem;
+  color: var(--muted);
+}
+.sortable:hover { color: var(--text); }
+.sortable[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.row .cell { font-variant-numeric: tabular-nums; font-size: .85rem; }
+
+@media (max-width: 760px) {
+  .row.decide, .row.review, .head-row { grid-template-columns: 14px 1fr auto; }
+  .row.review .figures, .row.review .checks { grid-column: 1 / -1; }
+  .row.review .row-end { grid-column: 3; grid-row: 1; }
+  .head-row { display: none; }
+}
+
+/* Headroom: distance from this category's own targets, as a multiple.
+   A bar as well as a number, because the point is comparing twenty of them
+   down a column and digits alone do not group at a glance. */
+.headroom { display: inline-flex; align-items: center; gap: .45rem; justify-content: flex-end; }
+.headroom .track {
+  width: 44px; height: 5px; border-radius: 3px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+.headroom .track i { position: absolute; inset: 0 auto 0 0; display: block; border-radius: 3px; }
+.headroom b { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 2.5rem; text-align: right; }
+.headroom.good .track i { background: var(--green); }
+.headroom.ok   .track i { background: var(--accent); }
+.headroom.warn .track i { background: var(--yellow); }
+.headroom.bad  .track i { background: var(--red); }
+.headroom.none b { color: var(--unknown); }
+.headroom.good b { color: var(--green); }
+.headroom.bad b  { color: var(--red); }
+
+/* A change window that has not accumulated enough history yet. Distinct from a
+   missing value: the system is fine, the calendar is not. */
+.pending { color: var(--unknown); font-style: normal; }
+
+/* A wide table scrolls inside its own box; the page never scrolls sideways. */
+.scroller { overflow-x: auto; }

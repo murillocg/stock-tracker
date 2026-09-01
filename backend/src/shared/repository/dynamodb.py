@@ -142,6 +142,17 @@ class DynamoDbSnapshotRepository:
         items = response.get("Items", [])
         return None if not items else DailySnapshot.model_validate(items[0])
 
+    def earliest(self, ticker: str) -> DailySnapshot | None:
+        # The same query forwards: the sort key is an ISO date, so the first row
+        # is the oldest. One read unit, like `latest`.
+        response = self._table.query(
+            KeyConditionExpression=Key("ticker").eq(ticker.strip().upper()),
+            ScanIndexForward=True,
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        return None if not items else DailySnapshot.model_validate(items[0])
+
 
 class DynamoDbTransactionRepository:
     """`Transactions` table. Conforms to `TransactionRepository` structurally."""

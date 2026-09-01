@@ -7,6 +7,7 @@ irrelevant for a CYCLICAL at the bottom of its cycle.
 
 from decimal import Decimal
 
+from shared.categories.aggregate import overall_headroom
 from shared.categories.rules import (
     ASSET_PLAY_PB_BAND,
     CYCLICAL_PB_BAND,
@@ -256,4 +257,5 @@ def evaluate(stock: Stock, snapshot: DailySnapshot | None = None) -> Evaluation:
         category=stock.category,
         signal=signal,
         checks=checks,
+        headroom=overall_headroom(checks),
     )

@@ -59,6 +59,15 @@ class SnapshotRepository(Protocol):
         """The most recent snapshot, or `None` if we have never collected it."""
         ...
 
+    def earliest(self, ticker: str) -> DailySnapshot | None:
+        """The oldest snapshot we hold. `None` if we have never collected it.
+
+        Exists so the UI can say how much history a change window still needs.
+        A 1-month change is not "missing" three days after collection began — it
+        is not due yet, and a bare dash cannot tell those apart.
+        """
+        ...
+
 
 class TransactionRepository(Protocol):
     """The `Transactions` ledger. PK=`ticker`, SK=`<date>#<id>`.

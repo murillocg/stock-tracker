@@ -58,6 +58,10 @@ class InMemorySnapshotRepository:
         ]
         return sorted(selected, key=lambda s: s.date)
 
+    def earliest(self, ticker: str) -> DailySnapshot | None:
+        by_date = self._items.get(ticker.strip().upper(), {})
+        return by_date[min(by_date)] if by_date else None
+
     def latest(self, ticker: str) -> DailySnapshot | None:
         by_date = self._items.get(ticker.strip().upper(), {})
         if not by_date:

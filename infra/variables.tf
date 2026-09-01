@@ -151,13 +151,20 @@ variable "log_retention_days" {
 
 variable "enable_point_in_time_recovery" {
   description = <<-EOT
-    PITR on DailySnapshots. Off by default to stay inside the free tier, but
-    consider turning it on: daily snapshots are the one thing here that CANNOT be
-    rebuilt: no free provider serves historical prices, so a lost table means the
-    change1w/1m/6m/1y series starts from zero again.
+    PITR on DailySnapshots and Transactions. ON by default.
+
+    These two tables are the only things here that CANNOT be rebuilt. No free
+    provider serves historical prices, so a lost DailySnapshots means the
+    change1w/1m/6m/1y series — and the headroom trend built on it — starts from
+    zero again and waits a year to be useful. The ledger is worse: it was
+    reconciled by hand against broker statements, and the Avenue quantities
+    cannot be recovered from the statements at all.
+
+    It was off to stay inside the free tier. PITR bills on table size, and these
+    tables hold kilobytes; the cost of the alternative is a year of waiting.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "api_memory_mb" {

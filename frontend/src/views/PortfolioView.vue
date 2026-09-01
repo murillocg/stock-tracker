@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import {
   brl,
   bySignal,
   listStocks,
   sumDecimals,
+  windowState,
   type CollectionStatus,
   type PortfolioTotals,
   type StockView,
 } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import CollectionLine from '@/components/CollectionLine.vue'
+import HeadroomBar from '@/components/HeadroomBar.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import PortfolioSummary from '@/components/PortfolioSummary.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -42,23 +44,55 @@ watchEffect(async () => {
   }
 })
 
-type Order = 'weight' | 'signal'
+type View = 'decide' | 'review'
+type Order = 'weight' | 'signal' | 'headroom'
 
-const order = ref<Order>('weight')
+const VIEW_KEY = 'stock-tracker.view'
+
+// localStorage can throw outright — a private window, a thumbnail capture, a
+// browser set to block site data — so every read and write is guarded and the
+// page renders correctly with nothing stored.
+function storedView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'review' ? 'review' : 'decide'
+  } catch {
+    return 'decide'
+  }
+}
+
+const view = ref<View>(storedView())
+const order = ref<Order>(view.value === 'decide' ? 'headroom' : 'weight')
+
+// The two views answer different questions, so each opens on the sort that
+// serves its own: Decide leads with the most room against target, Review with
+// the largest position. Switching resets the sort on purpose — carrying the
+// other view's ordering across is what made the old single screen confusing.
+watch(view, (next) => {
+  order.value = next === 'decide' ? 'headroom' : 'weight'
+  try {
+    localStorage.setItem(VIEW_KEY, next)
+  } catch {
+    // A remembered tab is a convenience, not state worth failing over.
+  }
+})
 
 // Two useful orderings, and neither is obviously right. By weight answers "where
 // is my money", which is the question this app exists for; by signal answers
 // "what needs attention". Sorting by weight puts the largest holdings first,
 // where a bad signal matters most.
+const descending = (get: (s: StockView) => string | null | undefined) => (a: StockView, b: StockView) =>
+  Number(get(b) ?? -1) - Number(get(a) ?? -1) || a.ticker.localeCompare(b.ticker)
+
 const sorted = computed(() => {
   const list = [...stocks.value]
   if (order.value === 'signal') return list.sort(bySignal)
-  return list.sort((a, b) => {
-    const wa = Number(a.valuation?.weight ?? -1)
-    const wb = Number(b.valuation?.weight ?? -1)
-    return wb - wa || a.ticker.localeCompare(b.ticker)
-  })
+  if (order.value === 'headroom') return list.sort(descending((s) => s.evaluation.headroom))
+  return list.sort(descending((s) => s.valuation?.weight))
 })
+
+/** A change column reads as a value, or as how long until it can have one. */
+const change = (stock: StockView, window: 'change1w' | 'change1m') =>
+  windowState(stock.current?.[window] ?? null, window, collection.value?.historySince ?? null)
 
 function subtotal(group: StockView[]) {
   const pick = (get: (s: StockView) => string | null | undefined) =>
@@ -96,10 +130,12 @@ const groups = computed(() =>
       <button :aria-pressed="tab === 'PORTFOLIO'" @click="tab = 'PORTFOLIO'">Portfolio</button>
       <button :aria-pressed="tab === 'WATCHLIST'" @click="tab = 'WATCHLIST'">Watchlist</button>
       <span class="spacer" />
-      <!-- Named by direction, not by field: "By signal" did not say which end
-           it put first, and it guessed wrong. -->
-      <button :aria-pressed="order === 'weight'" @click="order = 'weight'">Largest first</button>
-      <button :aria-pressed="order === 'signal'" @click="order = 'signal'">Best first</button>
+      <!-- Two questions, two views. Decide is "where does this month's money
+           go?"; Review is "how is everything holding up?". The old single screen
+           was answering both at once, which is why nothing on it could be
+           compared. -->
+      <button :aria-pressed="view === 'decide'" @click="view = 'decide'">Decide</button>
+      <button :aria-pressed="view === 'review'" @click="view = 'review'">Review</button>
     </nav>
 
     <PortfolioSummary v-if="totals" :totals="totals" />
@@ -117,40 +153,75 @@ const groups = computed(() =>
         </span>
       </header>
 
+      <div v-if="view === 'decide'" class="row head-row">
+        <span></span>
+        <span></span>
+        <span></span>
+        <button class="sortable" :aria-pressed="order === 'headroom'" @click="order = 'headroom'">
+          headroom
+        </button>
+        <span class="col-head">1w</span>
+        <span class="col-head">1m</span>
+        <span class="col-head">price</span>
+        <button class="sortable" :aria-pressed="order === 'weight'" @click="order = 'weight'">
+          weight
+        </button>
+      </div>
+
       <RouterLink
         v-for="stock in group.stocks"
         :key="stock.ticker"
         :to="`/stocks/${stock.ticker}`"
         class="row"
+        :class="view"
       >
         <SignalDot :signal="stock.evaluation.signal" />
         <span class="ticker">{{ stock.ticker }}</span>
         <CategoryLabel :category="stock.category" />
 
-        <HoldingFigures
-          :position="stock.position"
-          :valuation="stock.valuation"
-          :currency="stock.currency"
-          :priced="Boolean(stock.current)"
-          compact
-        />
-
-        <!-- Chips only. The explanations live on the detail page, one click
-             away: this screen is for comparing twenty holdings, not reading
-             about one. -->
-        <CheckChips :checks="stock.evaluation.checks" :with-reasons="false" />
-
-        <span class="row-end">
-          <span v-if="stock.current" class="price">
+        <template v-if="view === 'decide'">
+          <HeadroomBar :headroom="stock.evaluation.headroom" />
+          <span
+            v-for="w in (['change1w', 'change1m'] as const)"
+            :key="w"
+            class="cell"
+            :class="{ pending: change(stock, w).pending }"
+            :title="change(stock, w).pending ? 'Not enough price history yet.' : ''"
+          >
+            {{ change(stock, w).text }}
+          </span>
+          <span v-if="stock.current" class="cell price">
             <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
             {{ brl(stock.current.price) }}
           </span>
-          <span v-else class="price is-empty">—</span>
-          <span v-if="stock.valuation?.weight" class="weight">
+          <span v-else class="cell price is-empty">—</span>
+          <span v-if="stock.valuation?.weight" class="cell weight">
             {{ stock.valuation.weight }}<small>%</small>
           </span>
-          <span v-else class="weight is-empty">—</span>
-        </span>
+          <span v-else class="cell weight is-empty">—</span>
+        </template>
+
+        <template v-else>
+          <HoldingFigures
+            :position="stock.position"
+            :valuation="stock.valuation"
+            :currency="stock.currency"
+            :priced="Boolean(stock.current)"
+            compact
+          />
+          <CheckChips :checks="stock.evaluation.checks" :with-reasons="false" />
+          <span class="row-end">
+            <span v-if="stock.current" class="price">
+              <span class="currency">{{ stock.currency === 'BRL' ? 'R$' : '$' }}</span>
+              {{ brl(stock.current.price) }}
+            </span>
+            <span v-else class="price is-empty">—</span>
+            <span v-if="stock.valuation?.weight" class="weight">
+              {{ stock.valuation.weight }}<small>%</small>
+            </span>
+            <span v-else class="weight is-empty">—</span>
+          </span>
+        </template>
       </RouterLink>
     </section>
   </div>

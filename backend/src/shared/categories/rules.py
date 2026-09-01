@@ -5,7 +5,7 @@ named constants, so they are easy to find and argue with — which is the point.
 """
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
 from shared.categories.signals import Check, Signal
@@ -146,6 +146,49 @@ def band_signal(value: Decimal | None, band: Band) -> Signal:
     return Signal.YELLOW if value >= band.yellow else Signal.RED
 
 
+HEADROOM_FLOOR = Decimal("0.2")
+HEADROOM_CEILING = Decimal("4")
+"""Clamps on a single check's headroom.
+
+Without them one extreme swamps the rest: MU's P/B of 10.49 against a limit of 1
+is a headroom of 0.095, and a PEG of 0.31 against 1 is 3.2. Both are true and
+neither deserves to decide a whole stock's number on its own.
+"""
+
+
+def headroom(value: Decimal | None, band: Band) -> Decimal | None:
+    """How far `value` sits from its target, normalised so directions compare.
+
+    Lower-is-better divides the target by the value, higher-is-better does the
+    reverse, so both give "multiples of room" and a P/E can be weighed against an
+    ROE. 1.0 is exactly at target.
+
+    `None` where the question does not apply — a missing value, or a band with a
+    green threshold of zero, which is how the payout rule is expressed. Payout is
+    unhealthy at BOTH ends (a company paying 15% is hoarding, one paying 110% is
+    borrowing to pay you), and a range has no single direction to measure from.
+    """
+    if value is None or band.green == 0:
+        return None
+
+    if not band.lower_is_better:
+        if value <= 0:
+            return HEADROOM_FLOOR
+        return _clamp(value / band.green)
+
+    # Zero or negative beats any ceiling: BPAC11's net debt / EBITDA of -6 is net
+    # cash, which is not "infinitely good" but is certainly at the top of the
+    # scale rather than off the bottom of it, where a raw division would put it.
+    if value <= 0:
+        return HEADROOM_CEILING
+    return _clamp(band.green / value)
+
+
+def _clamp(ratio: Decimal) -> Decimal:
+    bounded = min(max(ratio, HEADROOM_FLOOR), HEADROOM_CEILING)
+    return bounded.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _verdict(value: Decimal, band: Band, signal: Signal, unit: str) -> str:
     """State the number against the limit it was judged by.
 
@@ -197,6 +240,7 @@ def check(
         value=value,
         signal=signal,
         explanation=f"{_verdict(value, band, signal, unit)} {meaning}",
+        headroom=headroom(value, band),
     )
 
 

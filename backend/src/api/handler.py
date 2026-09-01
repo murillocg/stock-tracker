@@ -85,7 +85,11 @@ def exchange_rates(stocks: StockRepository) -> ExchangeRates:
     return ExchangeRates(base=BASE_CURRENCY, rates={Currency.USD: fx.current.price})
 
 
-def collection_status(stocks: list[Stock], config: Config | None) -> CollectionStatus:
+def collection_status(
+    stocks: list[Stock],
+    snapshots: SnapshotRepository,
+    config: Config | None,
+) -> CollectionStatus:
     """Freshness of the data and the next scheduled refresh.
 
     Both read off what is already loaded — the snapshots carry their own run
@@ -93,11 +97,18 @@ def collection_status(stocks: list[Stock], config: Config | None) -> CollectionS
     """
     runs = [s.current.collected_at for s in stocks if s.current and s.current.collected_at]
     days = [s.current.date for s in stocks if s.current]
+
+    # One extra 1-item query, against a single ticker rather than all of them:
+    # every stock is collected by the same run, so the oldest day one of them
+    # holds is the oldest day any of them do.
+    sampled = next((s for s in stocks if s.current), None)
+    oldest = snapshots.earliest(sampled.ticker) if sampled else None
     expression = config.collection_schedule if config else DEFAULT_SCHEDULE
     zone = config.schedule_timezone if config else DEFAULT_TIMEZONE
     return CollectionStatus(
         last_run=max(runs) if runs else None,
         last_collected=max(days) if days else None,
+        history_since=oldest.date if oldest else None,
         next_run=next_run(expression, zone, dt.datetime.now(dt.UTC)),
         timezone=zone,
     )
@@ -175,6 +186,7 @@ def build_views(
 
 def list_stocks(
     stocks: StockRepository,
+    snapshots: SnapshotRepository,
     transactions: TransactionRepository,
     raw_list_type: str | None,
     config: Config | None = None,
@@ -200,7 +212,9 @@ def list_stocks(
     return json_response(
         200,
         StockListResponse(
-            stocks=views, totals=totals, collection=collection_status(ordered, config)
+            stocks=views,
+            totals=totals,
+            collection=collection_status(ordered, snapshots, config),
         ),
     )
 
@@ -264,7 +278,7 @@ def route(
     path: dict[str, str] = event.get("pathParameters") or {}
 
     if route_key == "GET /stocks":
-        return list_stocks(stocks, transactions, params.get("listType"), config)
+        return list_stocks(stocks, snapshots, transactions, params.get("listType"), config)
 
     if route_key == "GET /stocks/{ticker}":
         ticker = path.get("ticker", "")

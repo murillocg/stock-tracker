@@ -28,6 +28,8 @@ export interface Check {
   value: string | null
   signal: Signal
   explanation: string
+  /** Room against this check's own target, as a multiple. 1.0 is at target. */
+  headroom: string | null
 }
 
 export interface Evaluation {
@@ -35,6 +37,11 @@ export interface Evaluation {
   category: LynchCategory | null
   signal: Signal
   checks: Check[]
+  /**
+   * Room against this category's targets, as one number. Not a score: it knows
+   * the ruleset and nothing else — not your weights, not your cash.
+   */
+  headroom: string | null
 }
 
 export interface Snapshot {
@@ -51,6 +58,7 @@ export interface Snapshot {
   payoutRatio: string | null
   grossMargin: string | null
   ebitdaMargin: string | null
+  peg: string | null
   revenueCagr5y: string | null
   earningsCagr5y: string | null
   referenceDate: string | null
@@ -58,6 +66,8 @@ export interface Snapshot {
   change1m: string | null
   change6m: string | null
   change1y: string | null
+  /** When the collector run that wrote this row started, in UTC. */
+  collectedAt: string | null
 }
 
 export interface Position {
@@ -100,6 +110,8 @@ export interface CollectionStatus {
   lastRun: string | null
   /** Freshest trading day held. Differs from lastRun when a run collected nothing. */
   lastCollected: string | null
+  /** Oldest day we hold a price for — lets the UI say "not due yet" vs "missing". */
+  historySince: string | null
   /** Null when the schedule is one the API cannot read — silence beats a wrong time. */
   nextRun: string | null
   timezone: string
@@ -238,6 +250,31 @@ export function relativeTime(iso: string): string {
 /** Sign of a Decimal string, judged textually — no float conversion involved. */
 export function isNegative(value: string): boolean {
   return value.trimStart().startsWith('-')
+}
+
+/** Days of price history needed before each change window can be computed. */
+export const WINDOW_DAYS = { change1w: 7, change1m: 30, change6m: 182, change1y: 365 } as const
+
+/**
+ * How a change column should read: a value, or how long until it can exist.
+ *
+ * Three days after collection began a one-month change is not missing, it is not
+ * due — and a bare dash cannot tell you which. `historySince` is the oldest day
+ * we hold a price for.
+ */
+export function windowState(
+  value: string | null,
+  window: keyof typeof WINDOW_DAYS,
+  historySince: string | null,
+): { text: string; pending: boolean } {
+  if (value !== null) return { text: `${value}%`, pending: false }
+  if (!historySince) return { text: '—', pending: true }
+
+  const days = Math.floor((Date.now() - new Date(`${historySince}T00:00:00`).getTime()) / 86400000)
+  const remaining = WINDOW_DAYS[window] - days
+  return remaining > 0
+    ? { text: `in ${remaining}d`, pending: true }
+    : { text: '—', pending: true }
 }
 
 /** Rank for sorting: the things needing attention first, the fine ones last. */

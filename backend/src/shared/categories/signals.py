@@ -68,6 +68,18 @@ class Check(CamelModel):
     explanation: str
     """Written for a human reading the UI, not for a log."""
 
+    headroom: Decimal | None = None
+    """How far this value sits from its own target, as a multiple.
+
+    1.0 is exactly at target; 2.0 is twice the room; 0.5 is half way to it. The
+    direction is normalised, so a P/E of 8 against a limit of 15 and an ROE of 30
+    against a floor of 15 both read as 1.88 — which is what makes checks from
+    different categories comparable at all.
+
+    `None` where the idea does not apply: a missing value, or a rule that is a
+    range rather than a threshold (payout, which is unhealthy at both ends).
+    """
+
 
 class Evaluation(CamelModel):
     """The verdict for one stock, plus every check that produced it."""
@@ -76,6 +88,14 @@ class Evaluation(CamelModel):
     category: LynchCategory | None
     signal: Signal
     checks: list[Check]
+
+    headroom: Decimal | None = None
+    """Room against this category's own targets, as one number.
+
+    Deliberately not called a score. It measures distance from the limits you
+    set; it does not know your weights, your cash, or anything outside the
+    ruleset, and CLAUDE.md is explicit that the app flags rather than decides.
+    """
 
     @property
     def unresolved(self) -> list[Check]:

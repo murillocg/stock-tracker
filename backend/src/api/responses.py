@@ -106,6 +106,14 @@ class CollectionStatus(CamelModel):
     that fails every ticker leaves this untouched, which is precisely the gap
     worth seeing."""
 
+    history_since: dt.date | None = None
+    """Oldest day we hold a price for. `None` before anything is collected.
+
+    Lets the screen distinguish "not due yet" from "missing": three days after
+    collection began, a one-month change is not a gap in the data, and a bare
+    dash cannot say which it is.
+    """
+
     next_run: dt.datetime | None
     """`None` when the schedule is not one this code can read — better silent
     than wrong, since the whole point is knowing if a refresh is imminent."""
