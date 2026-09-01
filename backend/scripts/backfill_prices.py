@@ -50,7 +50,14 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (stock-tracker; personal portfolio backfil
 
 
 def chart(client: httpx.Client, symbol: str, period: str) -> dict[dt.date, Decimal]:
-    """Daily closes for `symbol`, keyed by trading day."""
+    """Daily closes for `symbol`, keyed by trading day, up to YESTERDAY.
+
+    Today is excluded on purpose. The collector owns today, and it skips any
+    ticker that already has a row for the date it is collecting — so a price-only
+    row written here for today does not merely sit there, it makes the evening
+    run report SKIPPED and the real snapshot never arrives. That is a silent
+    failure: the run looks healthy and the fundamentals quietly vanish.
+    """
     response = client.get(
         f"{CHART_URL}/{symbol}", params={"range": period, "interval": "1d"}, headers=HEADERS
     )
@@ -59,11 +66,15 @@ def chart(client: httpx.Client, symbol: str, period: str) -> dict[dt.date, Decim
 
     stamps = result.get("timestamp") or []
     closes = result["indicators"]["quote"][0].get("close") or []
+    today = dt.date.today()
     return {
-        dt.date.fromtimestamp(stamp): Decimal(str(close)).quantize(Decimal("0.01"))
+        day: Decimal(str(close)).quantize(Decimal("0.01"))
         # A null close is a halted or untraded day. Skipping beats inventing one.
-        for stamp, close in zip(stamps, closes, strict=False)
-        if close is not None
+        for day, close in (
+            (dt.date.fromtimestamp(stamp), close)
+            for stamp, close in zip(stamps, closes, strict=False)
+        )
+        if close is not None and day < today
     }
 
 
@@ -145,12 +156,37 @@ def main(argv: list[str] | None = None) -> int:
     # The stored change windows were computed when there was no history behind
     # them, so they are all empty and nothing would recompute them until the next
     # collection. Redo them now, against the history that now exists.
+    recompute(stocks, snapshots)
+    return 0
+
+
+def carries_fundamentals(snapshot: DailySnapshot) -> bool:
+    """Whether this row came from a collection rather than a price backfill."""
+    return any(
+        getattr(snapshot, field) is not None
+        for field in ("pe", "pb", "roe", "ev_ebitda", "dividend_yield", "peg")
+    )
+
+
+def recompute(stocks: DynamoDbStockRepository, snapshots: DynamoDbSnapshotRepository) -> None:
+    """Redo the change windows now that there is history behind them.
+
+    The stored windows were computed when nothing preceded them, so they are all
+    empty and nothing would recompute them until the next collection.
+
+    `current` is taken from the newest row that CARRIES FUNDAMENTALS, not simply
+    the newest row. A backfilled row has a price and nothing else, and promoting
+    one to `current` strips the P/E and ROE the whole evaluation reads — which
+    turns every verdict grey and every headroom into a dash. It did exactly that
+    once; hence this function rather than `history[-1]`.
+    """
     print("\nRecomputing change windows:")
     for stock in targets(stocks):
         history = snapshots.history(stock.ticker, since=dt.date(2000, 1, 1))
         if not history:
             continue
-        latest = history[-1]
+        collected = [row for row in history if carries_fundamentals(row)]
+        latest = collected[-1] if collected else history[-1]
         changes = compute_changes(history[:-1], as_of=latest.date, current_price=latest.price)
         updated = apply_changes(latest, changes)
         snapshots.save(updated)
@@ -163,7 +199,6 @@ def main(argv: list[str] | None = None) -> int:
                 for window, value in sorted(changes.items(), key=lambda kv: kv[0].delta)
             )
         )
-    return 0
 
 
 if __name__ == "__main__":

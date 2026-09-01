@@ -356,6 +356,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     config = Config.from_env()
 
+    # `skipExisting: false` re-collects a day we already hold. The default is to
+    # skip, which keeps a re-run cheap — but it also means a row that exists and
+    # is WRONG can never be replaced, and the run reports SKIPPED while doing
+    # nothing. That happened: a price-only backfill row for today would have made
+    # the evening run skip every Brazilian ticker and silently drop the
+    # fundamentals.
+    skip_existing = bool(event.get("skipExisting", True))
     raw_as_of = event.get("asOf")
     as_of = dt.date.fromisoformat(raw_as_of) if raw_as_of else market_today(config.market_timezone)
     tickers = event.get("tickers")
@@ -374,6 +381,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             as_of=as_of,
             delay_seconds=config.provider_delay_seconds,
             tickers=tickers,
+            skip_existing=skip_existing,
             # One stamp for the whole run, taken once: every row a run writes
             # shares it, which is what makes "when did the job last run" a
             # question with a single answer rather than twenty near-misses.

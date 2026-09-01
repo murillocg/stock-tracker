@@ -681,3 +681,47 @@ def test_a_stock_without_fundamentals_costs_one_call() -> None:
     )
 
     assert slept == [1.5]
+
+
+def test_an_existing_day_can_be_recollected_on_request() -> None:
+    """`skipExisting: false` is the escape hatch for a row that exists and is
+    wrong. Without it a bad row is permanent: the run reports SKIPPED, looks
+    healthy, and changes nothing — which is how a price-only backfill row for
+    today would have silently stripped the fundamentals off every B3 ticker."""
+    snapshots = InMemorySnapshotRepository(
+        [DailySnapshot(ticker="PETR4", date=AS_OF, price=Decimal("1.00"))]
+    )
+    provider = StubProvider({"PETR4": build_quote("PETR4", "42.00")})
+
+    report = run(
+        stocks=InMemoryStockRepository([build_stock("PETR4")]),
+        snapshots=snapshots,
+        provider=provider,
+        skip_existing=False,
+    )
+
+    assert report.summary[TickerOutcome.SKIPPED] == 0
+    refreshed = snapshots.get("PETR4", AS_OF)
+    assert refreshed is not None
+    assert refreshed.price == Decimal("42.00")
+
+
+def test_by_default_an_existing_day_is_left_alone() -> None:
+    """Re-running a collection must stay cheap: the providers are rate limited,
+    and yesterday's answer for yesterday is still yesterday's answer."""
+    snapshots = InMemorySnapshotRepository(
+        [DailySnapshot(ticker="PETR4", date=AS_OF, price=Decimal("1.00"))]
+    )
+    provider = StubProvider({"PETR4": build_quote("PETR4", "42.00")})
+
+    report = run(
+        stocks=InMemoryStockRepository([build_stock("PETR4")]),
+        snapshots=snapshots,
+        provider=provider,
+    )
+
+    assert report.summary[TickerOutcome.SKIPPED] == 1
+    kept = snapshots.get("PETR4", AS_OF)
+    assert kept is not None
+    assert kept.price == Decimal("1.00")
+    assert provider.calls == []
