@@ -254,9 +254,18 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
    is the entire reason this view exists — twenty rows you can read as columns
    instead of twenty rows you have to re-parse one at a time. */
 .row.decide, .head-row {
-  grid-template-columns: 14px minmax(4.4rem, auto) minmax(6.5rem, auto) 1fr repeat(4, 4.6rem);
+  grid-template-columns:
+    14px minmax(4.4rem, auto) minmax(6.5rem, auto) 1fr
+    minmax(3.6rem, auto) minmax(3.6rem, auto) minmax(6.2rem, auto) minmax(4.4rem, auto);
 }
-.row.decide .cell, .head-row .cell { text-align: right; }
+/* Every numeric cell is nowrap and right-aligned: these are columns to be read
+   down, and a price that wraps or spills into the weight beside it defeats the
+   entire point of the layout. */
+.row.decide .cell,
+.head-row .cell,
+.head-row .col-head,
+.head-row .sortable { text-align: right; white-space: nowrap; }
+.row.decide .price .currency { margin-right: .15rem; }
 
 /* Review: the fuller row, where figures and chips take the flexible middle. */
 .row.review { grid-template-columns: 14px minmax(4.4rem, auto) auto auto 1fr auto; }

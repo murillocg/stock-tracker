@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { brl, getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
+import { brl, day, getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -31,7 +31,7 @@ watchEffect(async () => {
 
 type Panel = 'history' | 'transactions'
 
-const panel = ref<Panel>('transactions')
+const panel = ref<Panel>('history')
 
 const rowCount = computed(() =>
   ledgers.value.reduce((total, ledger) => total + ledger.entries.length, 0),
@@ -125,18 +125,38 @@ const CHANGES = [
 
       <article class="card">
         <nav class="tabs inline">
-          <button
-            :aria-pressed="panel === 'transactions'"
-            @click="panel = 'transactions'"
-          >
-            Transactions ({{ rowCount }})
-          </button>
           <button :aria-pressed="panel === 'history'" @click="panel = 'history'">
             Price history ({{ history.length }})
           </button>
+          <button :aria-pressed="panel === 'transactions'" @click="panel = 'transactions'">
+            Transactions ({{ rowCount }})
+          </button>
         </nav>
 
-        <template v-if="panel === 'transactions'">
+        <template v-if="panel === 'history'">
+          <div v-if="history.length" class="scroller">
+            <table class="history">
+              <thead>
+                <tr>
+                  <th>date</th>
+                  <th v-for="[key, label] in columns" :key="key" class="num">{{ label }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in history" :key="row.date">
+                  <td>{{ day(row.date) }}</td>
+                  <td v-for="[key] in columns" :key="key" class="num">
+                    {{ key === 'price' ? brl(row.price) : (row[key] ?? '—') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="subtle">
+            Nothing yet. The collector runs once each weekday evening.
+          </p>
+        </template>
+        <template v-else>
           <!-- One block per custodian, because that is the unit the Brazilian
                tax return asks for: Bens e Direitos takes an entry per
                institution, each with its own quantity and average cost. The
@@ -175,7 +195,7 @@ const CHANGES = [
                   :class="{ 'is-muted': entry.position === null }"
                   :title="entry.transaction.note ?? undefined"
                 >
-                  <td>{{ entry.transaction.date }}</td>
+                  <td>{{ day(entry.transaction.date) }}</td>
                   <td>{{ entry.transaction.type.toLowerCase().replace('_', ' ') }}</td>
                   <td class="num">{{ entry.transaction.quantity }}</td>
                   <td class="num">
@@ -209,29 +229,6 @@ const CHANGES = [
           <p v-if="!ledgers.length" class="subtle">No transactions recorded for this stock.</p>
         </template>
 
-        <template v-else>
-          <div v-if="history.length" class="scroller">
-            <table class="history">
-              <thead>
-                <tr>
-                  <th>date</th>
-                  <th v-for="[key, label] in columns" :key="key" class="num">{{ label }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in history" :key="row.date">
-                  <td>{{ row.date }}</td>
-                  <td v-for="[key] in columns" :key="key" class="num">
-                    {{ key === 'price' ? brl(row.price) : (row[key] ?? '—') }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p v-else class="subtle">
-            Nothing yet. The collector runs once each weekday evening.
-          </p>
-        </template>
       </article>
 
     </template>

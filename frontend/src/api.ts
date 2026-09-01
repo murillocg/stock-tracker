@@ -247,6 +247,19 @@ export function relativeTime(iso: string): string {
   return ahead ? `in ${plural}` : `${plural} ago`
 }
 
+/**
+ * `2026-08-31` -> `31/08/2026`.
+ *
+ * ISO is right for storage — it sorts lexicographically in the same order it
+ * sorts chronologically, which is what makes the DailySnapshots sort key work —
+ * and wrong for a Brazilian reader. Split textually rather than through `Date`,
+ * which would apply a timezone to a value that has none and can shift the day.
+ */
+export function day(iso: string): string {
+  const [year, month, date] = iso.split('-')
+  return year && month && date ? `${date}/${month}/${year}` : iso
+}
+
 /** Sign of a Decimal string, judged textually — no float conversion involved. */
 export function isNegative(value: string): boolean {
   return value.trimStart().startsWith('-')
