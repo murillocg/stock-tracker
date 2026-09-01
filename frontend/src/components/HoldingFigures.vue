@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { brl, isNegative, type Position, type Valuation } from '@/api'
+import { brl, isNegative, num, type Position, type Valuation } from '@/api'
 
 withDefaults(
   defineProps<{
@@ -25,8 +25,8 @@ const symbol = (currency: string) => (currency === 'BRL' ? 'R$' : '$')
   <div v-if="position" class="figures" :class="{ compact }">
     <span class="fig">
       <span class="k">holding</span>
-      <b>{{ position.quantity }}</b>
-      <span class="k">@ {{ position.averagePrice }}</span>
+      <b>{{ num(position.quantity) }}</b>
+      <span class="k">@ {{ brl(position.averagePrice ?? '0') }}</span>
     </span>
 
     <template v-if="valuation">
@@ -44,7 +44,7 @@ const symbol = (currency: string) => (currency === 'BRL' ? 'R$' : '$')
 
       <span class="fig" :class="isNegative(valuation.unrealisedGain) ? 'down' : 'up'">
         <b>
-          {{ isNegative(valuation.unrealisedGain) ? '' : '+' }}{{ valuation.unrealisedGainPercent }}%
+          {{ isNegative(valuation.unrealisedGain) ? '' : '+' }}{{ num(valuation.unrealisedGainPercent) }}%
         </b>
         <span v-if="!compact" class="k">
           {{ isNegative(valuation.unrealisedGain) ? '' : '+' }}{{ brl(valuation.unrealisedGain) }}

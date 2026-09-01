@@ -248,6 +248,26 @@ export function relativeTime(iso: string): string {
 }
 
 /**
+ * A ratio or percentage in Brazilian notation, at the precision the API sent.
+ *
+ * Separate from `brl` because the two have different jobs. `brl` is for money:
+ * it rounds to cents, because a price is a price. This is for everything else —
+ * P/E, ROE, margins, share counts — where rounding would be inventing a policy
+ * the data does not carry. A P/E of 12.1414 is what the provider computed from a
+ * quarter-end statement; it becomes 12,1414, not 12,14.
+ *
+ * Without this the same table spoke two conventions: 53,12 for the price and
+ * 12.1414 in the column beside it.
+ */
+export function num(value: string): string {
+  const trimmed = value.trim()
+  const negative = trimmed.startsWith('-')
+  const [whole = '0', fraction] = trimmed.replace(/^[-+]/, '').split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${negative ? '-' : ''}${grouped}${fraction ? `,${fraction}` : ''}`
+}
+
+/**
  * `2026-08-31` -> `31/08/2026`.
  *
  * ISO is right for storage — it sorts lexicographically in the same order it

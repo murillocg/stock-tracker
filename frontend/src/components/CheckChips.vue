@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Check } from '@/api'
+import { num, type Check } from '@/api'
 import SignalDot from './SignalDot.vue'
 
 const props = withDefaults(
@@ -43,7 +43,7 @@ const reasons = computed(() =>
     >
       <SignalDot :signal="check.signal" />
       {{ check.name }}
-      <strong>{{ check.value ?? '—' }}</strong>
+      <strong>{{ check.value === null ? '—' : num(check.value) }}</strong>
     </span>
   </div>
 

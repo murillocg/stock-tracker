@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { brl, isNegative, type PortfolioTotals } from '@/api'
+import { brl, isNegative, num, type PortfolioTotals } from '@/api'
 
 const props = defineProps<{ totals: PortfolioTotals }>()
 
@@ -23,7 +23,7 @@ const symbol = computed(() => (props.totals.currency === 'BRL' ? 'R$' : '$'))
       <span class="k">unrealised</span>
       <b>
         {{ isNegative(totals.unrealisedGain) ? '' : '+' }}{{ symbol }} {{ brl(totals.unrealisedGain) }}
-        <small>{{ isNegative(totals.unrealisedGain) ? '' : '+' }}{{ totals.unrealisedGainPercent }}%</small>
+        <small>{{ isNegative(totals.unrealisedGain) ? '' : '+' }}{{ num(totals.unrealisedGainPercent) }}%</small>
       </b>
     </div>
     <!-- Said out loud rather than hidden: a total that silently omits holdings

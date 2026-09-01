@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
-import { brl, day, getStock, type BrokerLedger, type Snapshot, type StockView } from '@/api'
+import {
+  brl,
+  day,
+  getStock,
+  num,
+  type BrokerLedger,
+  type Snapshot,
+  type StockView,
+} from '@/api'
 import CheckChips from '@/components/CheckChips.vue'
 import HoldingFigures from '@/components/HoldingFigures.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
@@ -118,7 +126,7 @@ const CHANGES = [
         <div class="checks">
           <span v-for="[label, key] in CHANGES" :key="key" class="chip">
             {{ label }}
-            <strong>{{ stock.current[key] ?? '—' }}%</strong>
+            <strong>{{ stock.current[key] === null ? '—' : num(stock.current[key]!) }}%</strong>
           </span>
         </div>
       </article>
@@ -146,7 +154,7 @@ const CHANGES = [
                 <tr v-for="row in history" :key="row.date">
                   <td>{{ day(row.date) }}</td>
                   <td v-for="[key] in columns" :key="key" class="num">
-                    {{ key === 'price' ? brl(row.price) : (row[key] ?? '—') }}
+                    {{ key === 'price' ? brl(row.price) : row[key] === null ? '—' : num(row[key]!) }}
                   </td>
                 </tr>
               </tbody>
@@ -166,7 +174,7 @@ const CHANGES = [
             <header class="group-head">
               <h2>{{ ledger.broker ?? 'no broker recorded' }}</h2>
               <span v-if="ledger.position" class="subtle">
-                {{ ledger.position.quantity }} @ {{ brl(ledger.position.averagePrice ?? '0') }}
+                {{ num(ledger.position.quantity) }} @ {{ brl(ledger.position.averagePrice ?? '0') }}
                 &middot; {{ brl(ledger.position.invested) }} invested
               </span>
               <span v-else class="subtle">closed &mdash; nothing held here now</span>
@@ -197,11 +205,11 @@ const CHANGES = [
                 >
                   <td>{{ day(entry.transaction.date) }}</td>
                   <td>{{ entry.transaction.type.toLowerCase().replace('_', ' ') }}</td>
-                  <td class="num">{{ entry.transaction.quantity }}</td>
+                  <td class="num">{{ num(entry.transaction.quantity) }}</td>
                   <td class="num">
                     {{ entry.transaction.unitPrice === '0' ? '—' : brl(entry.transaction.unitPrice) }}
                   </td>
-                  <td class="num">{{ entry.position?.quantity ?? '—' }}</td>
+                  <td class="num">{{ entry.position ? num(entry.position.quantity) : '—' }}</td>
                   <td class="num">
                     <b>{{ entry.position ? brl(entry.position.averagePrice ?? '0') : '—' }}</b>
                   </td>

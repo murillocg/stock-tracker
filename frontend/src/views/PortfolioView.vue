@@ -3,6 +3,7 @@ import { computed, ref, watch, watchEffect } from 'vue'
 import {
   brl,
   bySignal,
+  num,
   listStocks,
   sumDecimals,
   windowState,
@@ -196,7 +197,7 @@ const groups = computed(() =>
           </span>
           <span v-else class="cell price is-empty">—</span>
           <span v-if="stock.valuation?.weight" class="cell weight">
-            {{ stock.valuation.weight }}<small>%</small>
+            {{ num(stock.valuation.weight) }}<small>%</small>
           </span>
           <span v-else class="cell weight is-empty">—</span>
         </template>
@@ -217,7 +218,7 @@ const groups = computed(() =>
             </span>
             <span v-else class="price is-empty">—</span>
             <span v-if="stock.valuation?.weight" class="weight">
-              {{ stock.valuation.weight }}<small>%</small>
+              {{ num(stock.valuation.weight) }}<small>%</small>
             </span>
             <span v-else class="weight is-empty">—</span>
           </span>
