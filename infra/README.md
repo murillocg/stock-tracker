@@ -4,10 +4,18 @@ Terraform for Phase 0: the two DynamoDB tables, the collector Lambda, and the
 daily EventBridge schedule. API Gateway, SES and S3/CloudFront arrive in
 Phases 1–2.
 
-State is **local** (`terraform.tfstate`, gitignored). A remote S3 backend would
-mean a bucket and a lock table running permanently, which defeats the purpose.
-Back the file up if it matters — it is the only record of what exists, and it
-contains your API tokens.
+State lives in **S3**, with a DynamoDB table for the lock. It started local,
+on the argument that a bucket and a lock table running permanently defeat the
+purpose of a free-tier project — but GitHub Actions cannot deploy against a
+state file on one laptop, and both resources cost cents at this size.
+
+The backend is configured *partially*: `versions.tf` names the key and region,
+and the bucket and lock table come from `backend.hcl`, which is gitignored
+because the bucket name embeds the AWS account id. Run `bootstrap-state.sh`
+once to create them, then `terraform init -backend-config=backend.hcl`.
+
+The state file still contains your API tokens, which is why the bucket is
+private and encrypted.
 
 ## Pick the AWS account first
 
