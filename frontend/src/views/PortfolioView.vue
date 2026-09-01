@@ -3,6 +3,7 @@ import { computed, ref, watch, watchEffect } from 'vue'
 import {
   brl,
   bySignal,
+  isNegative,
   num,
   listStocks,
   sumDecimals,
@@ -95,6 +96,18 @@ const sorted = computed(() => {
 const change = (stock: StockView, window: 'change1w' | 'change1m') =>
   windowState(stock.current?.[window] ?? null, window, collection.value?.historySince ?? null)
 
+/**
+ * Green up, red down — and neutral for exactly zero, which is neither. Judged
+ * from the raw string rather than the rendered text, so it does not depend on
+ * how the number happens to be formatted.
+ */
+function direction(stock: StockView, window: 'change1w' | 'change1m'): string {
+  const raw = stock.current?.[window]
+  if (raw === null || raw === undefined) return ''
+  if (Number(raw) === 0) return 'flat'
+  return isNegative(raw) ? 'down' : 'up'
+}
+
 function subtotal(group: StockView[]) {
   const pick = (get: (s: StockView) => string | null | undefined) =>
     group.map(get).filter((v): v is string => typeof v === 'string')
@@ -186,7 +199,7 @@ const groups = computed(() =>
             v-for="w in (['change1w', 'change1m'] as const)"
             :key="w"
             class="cell"
-            :class="{ pending: change(stock, w).pending }"
+            :class="[direction(stock, w), { pending: change(stock, w).pending }]"
             :title="change(stock, w).pending ? 'Not enough price history yet.' : ''"
           >
             {{ change(stock, w).text }}

@@ -253,10 +253,14 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
 /* Decide: fixed tracks, so every column lines up down the list. That alignment
    is the entire reason this view exists — twenty rows you can read as columns
    instead of twenty rows you have to re-parse one at a time. */
+/* The last four tracks are FIXED, not `auto`. The header and the rows are
+   separate grid containers, so a content-sized track resolves independently in
+   each — the header sized "1w" while the row beside it sized "-16,87%", and the
+   two columns could never line up. Everything before them can still flex,
+   because the 1fr in the middle absorbs the difference. */
 .row.decide, .head-row {
   grid-template-columns:
-    14px minmax(4.4rem, auto) minmax(6.5rem, auto) 1fr
-    minmax(3.6rem, auto) minmax(3.6rem, auto) minmax(6.2rem, auto) minmax(4.4rem, auto);
+    14px minmax(4.4rem, auto) minmax(6.5rem, auto) 1fr 4.6rem 4.6rem 6.8rem 4.8rem;
 }
 /* Every numeric cell is nowrap and right-aligned: these are columns to be read
    down, and a price that wraps or spills into the weight beside it defeats the
@@ -330,3 +334,11 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
 
 /* A wide table scrolls inside its own box; the page never scrolls sideways. */
 .scroller { overflow-x: auto; }
+
+/* Price direction, in the market's own convention. Deliberately text-only, with
+   no dot: the coloured dots on this screen mean "meets its category", and a
+   price going up is not a verdict. Same treatment the unrealised gain already
+   uses in the Review view. */
+.row .cell.up { color: var(--green); }
+.row .cell.down { color: var(--red); }
+.row .cell.flat { color: var(--muted); }
