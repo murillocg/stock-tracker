@@ -16,9 +16,15 @@ going forward; this only fills the hole behind it. Rows written here carry a
 price and nothing else, because the chart endpoint serves nothing else — which
 also makes them easy to tell apart from a collected row.
 
-US tickers are excluded until we work out why Alpha Vantage disagrees with Yahoo
-on them (BABA by 4.1%, matching no recent close). Splicing under a price we do
-not trust would bake that difference into every US change window.
+Covers both markets. B3 tickers carry a `.SA` suffix on Yahoo; US ones are
+themselves.
+
+A note on the one disagreement this turned up. Prices written by the SCHEDULED
+run — 19:00 New York, hours after the close — match Yahoo to the cent. Three rows
+written by ad-hoc invocations minutes after the bell did not, because Alpha
+Vantage's GLOBAL_QUOTE was still serving an intraday quote and we stored it as a
+close. That is an argument for collecting on the schedule, not against either
+source.
 """
 
 import argparse
@@ -78,16 +84,29 @@ def chart(client: httpx.Client, symbol: str, period: str) -> dict[dt.date, Decim
     }
 
 
-def targets(stocks: DynamoDbStockRepository) -> Iterator[Stock]:
-    """Brazilian holdings and watchlist entries, oldest ticker first."""
+def symbol_for(stock: Stock) -> str:
+    """Yahoo's name for this security. B3 listings take a `.SA` suffix."""
+    return f"{stock.ticker}.SA" if stock.market is Market.B3 else stock.ticker
+
+
+def targets(stocks: DynamoDbStockRepository, market: str | None = None) -> Iterator[Stock]:
+    """Holdings and watchlist entries, oldest ticker first."""
     both = [*stocks.list_by_type(ListType.PORTFOLIO), *stocks.list_by_type(ListType.WATCHLIST)]
-    yield from sorted((s for s in both if s.market is Market.B3), key=lambda s: s.ticker)
+    chosen = (
+        both if market is None else [s for s in both if (s.market is Market.B3) == (market == "B3")]
+    )
+    yield from sorted(chosen, key=lambda s: s.ticker)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Backfill B3 price history from Yahoo.")
     parser.add_argument("--dry-run", action="store_true", help="Report without writing.")
     parser.add_argument("--period", default="1y", help="Yahoo range: 1y, 2y, 5y, max.")
+    parser.add_argument(
+        "--market",
+        choices=["B3", "US"],
+        help="Restrict to one side of the book. Both by default.",
+    )
     parser.add_argument("--region", default="us-east-1")
     args = parser.parse_args(argv)
 
@@ -102,10 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     print("-" * 62)
 
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True) as client:
-        for stock in targets(stocks):
+        for stock in targets(stocks, args.market):
             time.sleep(DELAY_SECONDS)
             try:
-                closes = chart(client, f"{stock.ticker}.SA", args.period)
+                closes = chart(client, symbol_for(stock), args.period)
             except (httpx.HTTPError, KeyError, IndexError) as exc:
                 conflicts.append(f"{stock.ticker}: could not fetch ({type(exc).__name__})")
                 continue
@@ -156,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
     # The stored change windows were computed when there was no history behind
     # them, so they are all empty and nothing would recompute them until the next
     # collection. Redo them now, against the history that now exists.
-    recompute(stocks, snapshots)
+    recompute(stocks, snapshots, args.market)
     return 0
 
 
@@ -168,7 +187,11 @@ def carries_fundamentals(snapshot: DailySnapshot) -> bool:
     )
 
 
-def recompute(stocks: DynamoDbStockRepository, snapshots: DynamoDbSnapshotRepository) -> None:
+def recompute(
+    stocks: DynamoDbStockRepository,
+    snapshots: DynamoDbSnapshotRepository,
+    market: str | None = None,
+) -> None:
     """Redo the change windows now that there is history behind them.
 
     The stored windows were computed when nothing preceded them, so they are all
@@ -181,7 +204,7 @@ def recompute(stocks: DynamoDbStockRepository, snapshots: DynamoDbSnapshotReposi
     once; hence this function rather than `history[-1]`.
     """
     print("\nRecomputing change windows:")
-    for stock in targets(stocks):
+    for stock in targets(stocks, market):
         history = snapshots.history(stock.ticker, since=dt.date(2000, 1, 1))
         if not history:
             continue
