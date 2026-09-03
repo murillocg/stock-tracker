@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
-from shared.categories.signals import Check, Signal
+from shared.categories.signals import Check, Elasticity, Signal
 from shared.models import DailySnapshot
 
 
@@ -220,6 +220,7 @@ def check(
     meaning: str,
     *,
     unit: str = "",
+    elasticity: Elasticity = Elasticity.INDEPENDENT,
 ) -> Check:
     """Build a `Check` whose explanation answers "why is this that colour?".
 
@@ -234,12 +235,16 @@ def check(
             value=None,
             signal=Signal.INSUFFICIENT_DATA,
             explanation=f"{name} is not available from any free data source for this stock.",
+            elasticity=elasticity,
+            green=band.green,
         )
     return Check(
         name=name,
         value=value,
         signal=signal,
         explanation=f"{_verdict(value, band, signal, unit)} {meaning}",
+        elasticity=elasticity,
+        green=band.green,
         headroom=headroom(value, band),
     )
 

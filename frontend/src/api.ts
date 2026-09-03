@@ -105,6 +105,38 @@ export interface PortfolioTotals {
   unpriced: number
 }
 
+export interface EntryPrice {
+  /** Where this stock's own rules would turn green. Null when nothing inverted. */
+  price: string | null
+  /** Signed % from today's price. Negative means a fall is needed. */
+  discountNeeded: string | null
+  /** Failing checks that price cannot repair — a low ROE stays low. */
+  blockedBy: string[]
+  /** Price-based checks too far past their limit to invert meaningfully. */
+  unbounded: string[]
+}
+
+export interface PriceRange {
+  low: string
+  high: string
+  /** 0 at the 52-week low, 100 at the high. */
+  position: string
+}
+
+export interface WatchlistItem {
+  ticker: string
+  name: string
+  market: string
+  currency: string
+  sector: string | null
+  category: LynchCategory | null
+  isForeign: boolean
+  current: Snapshot | null
+  evaluation: Evaluation
+  entry: EntryPrice
+  range52w: PriceRange | null
+}
+
 export interface CollectionStatus {
   /** When the collector last actually ran. Null for rows written before stamping. */
   lastRun: string | null
@@ -168,6 +200,12 @@ async function get<T>(path: string): Promise<T> {
     throw new Error(body?.message ?? `Request failed (${response.status})`)
   }
   return (await response.json()) as T
+}
+
+export function listWatchlist() {
+  return get<{ stocks: WatchlistItem[]; collection: CollectionStatus | null }>(
+    '/stocks?listType=WATCHLIST',
+  )
 }
 
 export function listStocks(listType?: 'PORTFOLIO' | 'WATCHLIST') {

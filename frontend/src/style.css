@@ -342,3 +342,58 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
 .row .cell.up { color: var(--green); }
 .row .cell.down { color: var(--red); }
 .row .cell.flat { color: var(--muted); }
+
+/* --- watchlist ---------------------------------------------------------------
+   A different shape from the portfolio, because it answers a different
+   question. No weight, no holding: price, the price the rules would accept, and
+   the gap between them. */
+.intro { max-width: 54ch; margin: -.2rem 0 1.2rem; }
+
+.wl-head, .row.watch {
+  display: grid;
+  grid-template-columns:
+    14px minmax(4.4rem, auto) minmax(6.5rem, auto)
+    6.6rem 6.6rem 5.6rem minmax(11rem, 1fr) 4.8rem;
+  align-items: center;
+  column-gap: .7rem;
+  row-gap: .3rem;
+}
+.wl-head {
+  padding: .35rem .25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: .7rem;
+  color: var(--muted);
+}
+.wl-head .cell, .row.watch .cell { text-align: right; white-space: nowrap; }
+.wl-head .cell.l, .row.watch .cell.l { text-align: left; }
+
+.row.watch { padding: .6rem .25rem; border-bottom: 1px solid var(--border); }
+.row.watch .distance { font-variant-numeric: tabular-nums; font-weight: 600; }
+/* Amber, not red: needing a fall is the normal state of a watchlist, not a fault. */
+.row.watch.waiting .distance { color: var(--yellow); }
+.row.watch.at-entry .distance { color: var(--green); }
+.row.watch.no-entry .distance { color: var(--unknown); }
+
+/* Spans the full width beneath the row it explains. */
+.row.watch .reason {
+  grid-column: 2 / -1;
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.range { display: inline-flex; align-items: center; gap: .4rem; font-size: .72rem; color: var(--muted); }
+.range .track {
+  position: relative; width: 64px; height: 4px; border-radius: 2px;
+  background: var(--sunken); border: 1px solid var(--border);
+}
+.range .track i {
+  position: absolute; top: -3px; width: 2px; height: 10px;
+  background: var(--text); border-radius: 1px;
+}
+.range .lo, .range .hi { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .wl-head { display: none; }
+  .row.watch { grid-template-columns: 14px 1fr auto; }
+  .row.watch .cell.l { grid-column: 1 / -1; }
+}

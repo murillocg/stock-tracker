@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   brl,
   bySignal,
@@ -20,22 +20,20 @@ import PortfolioSummary from '@/components/PortfolioSummary.vue'
 import CategoryLabel from '@/components/CategoryLabel.vue'
 import SignalDot from '@/components/SignalDot.vue'
 
-type Tab = 'PORTFOLIO' | 'WATCHLIST'
-
-const tab = ref<Tab>('PORTFOLIO')
 const stocks = ref<StockView[]>([])
 const totals = ref<PortfolioTotals | null>(null)
 const collection = ref<CollectionStatus | null>(null)
 const error = ref<string | null>(null)
 const loading = ref(true)
 
-// watchEffect re-runs whenever a ref it read changes — so switching tabs refetches
-// with no explicit subscription. Vue's reactivity tracks the dependency itself.
-watchEffect(async () => {
+// Fetched once. It used to be a watchEffect keyed on the list-type tab, which is
+// what made switching to the watchlist blank this page while it refetched — the
+// watchlist is its own route now, so there is nothing to react to.
+onMounted(async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await listStocks(tab.value)
+    const data = await listStocks('PORTFOLIO')
     stocks.value = data.stocks
     totals.value = data.totals
     collection.value = data.collection
@@ -135,14 +133,13 @@ const groups = computed(() =>
 <template>
   <div class="page">
     <header class="page-head">
-      <h1>Stock Tracker</h1>
+      <h1>Portfolio</h1>
+      <RouterLink to="/watchlist" class="subtle">watchlist &rarr;</RouterLink>
     </header>
 
     <CollectionLine v-if="collection" :collection="collection" />
 
     <nav class="tabs">
-      <button :aria-pressed="tab === 'PORTFOLIO'" @click="tab = 'PORTFOLIO'">Portfolio</button>
-      <button :aria-pressed="tab === 'WATCHLIST'" @click="tab = 'WATCHLIST'">Watchlist</button>
       <span class="spacer" />
       <!-- Two questions, two views. Decide is "where does this month's money
            go?"; Review is "how is everything holding up?". The old single screen

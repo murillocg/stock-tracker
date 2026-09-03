@@ -59,6 +59,27 @@ _SEVERITY: dict[Signal, int] = {
 }
 
 
+class Elasticity(StrEnum):
+    """How an indicator responds to the share price moving.
+
+    The watchlist inverts a threshold into a price, and that is only sound where
+    the relationship is exact. P/E, P/B and PEG are strictly proportional to
+    price — earnings, book value and growth do not move when the quote does.
+    Dividend yield is strictly inverse. Everything else is untouched by price,
+    and that is the interesting case: a failing quality test is not something a
+    lower price can repair.
+
+    EV/EBITDA is deliberately absent from the proportional set. Enterprise value
+    is market cap PLUS net debt, so the ratio moves sub-proportionally with the
+    price and inverting it naively would understate the entry price of any
+    indebted company.
+    """
+
+    PROPORTIONAL = "PROPORTIONAL"
+    INVERSE = "INVERSE"
+    INDEPENDENT = "INDEPENDENT"
+
+
 class Check(CamelModel):
     """One indicator weighed against this category's limit."""
 
@@ -67,6 +88,15 @@ class Check(CamelModel):
     signal: Signal
     explanation: str
     """Written for a human reading the UI, not for a log."""
+
+    elasticity: Elasticity = Elasticity.INDEPENDENT
+    """Whether this check moves with the price. Drives the entry-price
+    calculation; defaults to INDEPENDENT so a new check is never silently
+    inverted on an assumption nobody made."""
+
+    green: Decimal | None = None
+    """The threshold this check was judged against, carried alongside the value
+    so the entry price can be derived without re-deriving the band."""
 
     headroom: Decimal | None = None
     """How far this value sits from its own target, as a multiple.

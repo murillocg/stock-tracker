@@ -21,13 +21,17 @@ import boto3
 from api.responses import (
     CollectionStatus,
     PortfolioTotals,
+    PriceRange,
     StockDetailResponse,
     StockListResponse,
     StockView,
+    WatchlistItem,
+    WatchlistResponse,
     error,
     json_response,
 )
-from shared.categories import evaluate
+from shared.categories import entry_price, evaluate
+from shared.categories.entry import EntryPrice
 from shared.config import Config
 from shared.models import Currency, ListType, Stock
 from shared.positions import (
@@ -184,6 +188,74 @@ def build_views(
     return views, totals
 
 
+YEAR = dt.timedelta(days=365)
+
+
+def price_range(snapshots: SnapshotRepository, ticker: str, price: Decimal) -> PriceRange | None:
+    """Where `price` sits inside the last year, or `None` without enough history.
+
+    Context the number alone cannot give: SMFT3 at R$ 17,72 says nothing until
+    you know the year ran from 16,61 to 27,13 and it is sitting near the floor.
+    """
+    today = dt.date.today()
+    history = snapshots.history(ticker, since=today - YEAR, until=today)
+    if len(history) < 2:
+        return None
+
+    low = min(row.price for row in history)
+    high = max(row.price for row in history)
+    if high <= low:
+        return None
+    return PriceRange(
+        low=low,
+        high=high,
+        position=((price - low) / (high - low) * 100).quantize(Decimal("0.1")),
+    )
+
+
+def list_watchlist(
+    stocks: StockRepository,
+    snapshots: SnapshotRepository,
+    config: Config | None,
+) -> dict[str, Any]:
+    """Stocks you are waiting on, each with the price its own rules would accept.
+
+    A different shape from the portfolio on purpose. There is no position, no
+    weight and no total here — the question is not "how much do I hold" but
+    "has it fallen far enough yet".
+    """
+    found = sorted(stocks.list_by_type(ListType.WATCHLIST), key=lambda s: s.ticker)
+
+    items = []
+    for stock in found:
+        evaluation = evaluate(stock)
+        price = stock.current.price if stock.current else None
+        items.append(
+            WatchlistItem(
+                ticker=stock.ticker,
+                name=stock.name,
+                market=stock.market,
+                currency=stock.currency,
+                sector=stock.sector,
+                category=stock.category,
+                is_foreign=stock.is_foreign,
+                current=stock.current,
+                evaluation=evaluation,
+                entry=(
+                    entry_price(evaluation.checks, price) if price is not None else EntryPrice()
+                ),
+                range_52w=(
+                    price_range(snapshots, stock.ticker, price) if price is not None else None
+                ),
+            )
+        )
+
+    return json_response(
+        200,
+        WatchlistResponse(stocks=items, collection=collection_status(found, snapshots, config)),
+    )
+
+
 def list_stocks(
     stocks: StockRepository,
     snapshots: SnapshotRepository,
@@ -205,6 +277,8 @@ def list_stocks(
         except ValueError:
             allowed = ", ".join(member.value for member in ListType)
             return error(400, f"Unknown listType '{raw_list_type}'. Expected one of: {allowed}.")
+        if list_type is ListType.WATCHLIST:
+            return list_watchlist(stocks, snapshots, config)
         found = stocks.list_by_type(list_type)
 
     ordered = sorted(found, key=lambda s: s.ticker)

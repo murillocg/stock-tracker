@@ -7,6 +7,7 @@ no single set of thresholds that could be correct for both.
 Pure functions throughout: a stock and a snapshot in, a verdict out, no I/O.
 """
 
+from shared.categories.entry import EntryPrice, entry_price
 from shared.categories.evaluate import HUMAN_JUDGEMENT, evaluate
 from shared.categories.rules import Band, band_signal
 from shared.categories.signals import Check, Evaluation, Signal, worst
@@ -15,9 +16,11 @@ __all__ = [
     "HUMAN_JUDGEMENT",
     "Band",
     "Check",
+    "EntryPrice",
     "Evaluation",
     "Signal",
     "band_signal",
+    "entry_price",
     "evaluate",
     "worst",
 ]

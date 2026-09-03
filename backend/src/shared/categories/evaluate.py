@@ -23,7 +23,7 @@ from shared.categories.rules import (
     payout_check,
     stalwart_pe_band,
 )
-from shared.categories.signals import Check, Evaluation, Signal, worst
+from shared.categories.signals import Check, Elasticity, Evaluation, Signal, worst
 from shared.indicators import peg
 from shared.models import DailySnapshot, LynchCategory, Stock
 
@@ -72,6 +72,7 @@ def fast_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             PEG_BAND,
             "Lynch's test: under 1 means you are not paying more for the company "
             "than it is growing.",
+            elasticity=Elasticity.PROPORTIONAL,
         ),
         check(
             "Earnings CAGR 5y",
@@ -97,6 +98,7 @@ def stalwart(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             "A stalwart is bought for steady compounding, so overpaying for it "
             "spends years of that return up front. The limit follows the market: "
             "a lower risk-free rate supports a higher multiple.",
+            elasticity=Elasticity.PROPORTIONAL,
         ),
         check(
             "ROE",
@@ -138,6 +140,8 @@ def slow_grower(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             DIVIDEND_YIELD_BAND,
             "The income on today's price — the only reason to hold a slow grower." + provenance,
             unit="%",
+            # The one inverse case: a lower price RAISES the yield.
+            elasticity=Elasticity.INVERSE,
         ),
         payout_check(payout_value),
     ]
@@ -152,6 +156,7 @@ def asset_play(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             ASSET_PLAY_PB_BAND,
             "Under 1 means paying less than the assets are carried at, which is the "
             "entire asset-play thesis.",
+            elasticity=Elasticity.PROPORTIONAL,
         )
     ]
 
@@ -170,6 +175,7 @@ def cyclical(stock: Stock, snapshot: DailySnapshot) -> list[Check]:
             CYCLICAL_PB_BAND,
             "Book value is the honest lens across a cycle — earnings collapse at the "
             "bottom, which makes P/E look expensive exactly when the stock is cheapest.",
+            elasticity=Elasticity.PROPORTIONAL,
         )
     ]
 

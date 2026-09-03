@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import Field
 
 from shared.categories import Evaluation
+from shared.categories.entry import EntryPrice
 from shared.models import (
     CamelModel,
     Currency,
@@ -74,6 +75,45 @@ class StockView(CamelModel):
         )
 
 
+class PriceRange(CamelModel):
+    """Where the price sits inside its own last year."""
+
+    low: Decimal
+    high: Decimal
+    position: Decimal
+    """0 at the 52-week low, 100 at the high. Context the raw price cannot give:
+    R$ 17,72 means nothing until you know the year ran 16,61 to 27,13."""
+
+
+class WatchlistItem(CamelModel):
+    """One stock you do not own, described for the only question that matters.
+
+    Deliberately not a `StockView`. That type carries position, valuation and
+    weight — four fields that are structurally empty here, because you hold none
+    of it. Reusing it would have meant a screen full of dashes and no room for
+    the entry price.
+    """
+
+    ticker: Ticker
+    name: str
+    market: Market
+    currency: Currency
+    sector: str | None
+    category: LynchCategory | None
+    is_foreign: bool
+    current: DailySnapshot | None
+    evaluation: Evaluation
+
+    entry: EntryPrice
+    """Where this stock's own rules would turn green."""
+
+    range_52w: PriceRange | None = Field(default=None, alias="range52w")
+    """`None` until there is a year of history behind it.
+
+    The alias is explicit because `to_camel` renders this as `range52W` — it
+    capitalises the segment after a digit. The same trap `change1w` hit."""
+
+
 class PortfolioTotals(CamelModel):
     """The portfolio as a whole, so the frontend does not re-add the parts."""
 
@@ -119,6 +159,13 @@ class CollectionStatus(CamelModel):
     than wrong, since the whole point is knowing if a refresh is imminent."""
 
     timezone: str
+
+
+class WatchlistResponse(CamelModel):
+    """GET /stocks?listType=WATCHLIST — no totals, because nothing is owned."""
+
+    stocks: list[WatchlistItem]
+    collection: CollectionStatus | None = None
 
 
 class StockListResponse(CamelModel):

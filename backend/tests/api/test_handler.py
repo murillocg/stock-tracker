@@ -445,3 +445,74 @@ def test_the_rate_itself_is_never_listed_as_a_holding() -> None:
     _, body = call("GET /stocks", stocks=stocks, transactions=transactions)
 
     assert "USDBRL" not in {s["ticker"] for s in body["stocks"]}
+
+
+# --- the watchlist -----------------------------------------------------------
+
+
+def test_the_watchlist_has_no_totals_because_nothing_is_owned() -> None:
+    stock = build_stock(
+        "TOTS3",
+        list_type=ListType.WATCHLIST,
+        category=LynchCategory.STALWART,
+        current=build_snapshot("TOTS3", TODAY, price=Decimal("34.74"), pe=Decimal("14.49")),
+    )
+
+    status, body = call("GET /stocks", stocks=[stock], query={"listType": "WATCHLIST"})
+
+    assert status == 200
+    assert "totals" not in body
+    assert body["stocks"][0]["ticker"] == "TOTS3"
+
+
+def test_it_carries_an_entry_price_derived_from_the_category() -> None:
+    """A P/E of 10 against a Brazilian limit of 15 means the price could rise by
+    half and still be green — so the entry sits above today's."""
+    stock = build_stock(
+        "TOTS3",
+        list_type=ListType.WATCHLIST,
+        category=LynchCategory.STALWART,
+        current=build_snapshot(
+            "TOTS3", TODAY, price=Decimal("100"), pe=Decimal("10"), roe=Decimal("20")
+        ),
+    )
+
+    _, body = call("GET /stocks", stocks=[stock], query={"listType": "WATCHLIST"})
+
+    assert body["stocks"][0]["entry"]["price"] == "150.00"
+    assert body["stocks"][0]["entry"]["discountNeeded"] == "50.00"
+
+
+def test_an_untagged_stock_gets_no_entry_price() -> None:
+    """The category is the input: a stalwart is judged on P/E, a fast grower on
+    PEG. Without one there is no threshold to invert."""
+    stock = build_stock(
+        "TOTS3",
+        list_type=ListType.WATCHLIST,
+        current=build_snapshot("TOTS3", TODAY, price=Decimal("100"), pe=Decimal("10")),
+    )
+
+    _, body = call("GET /stocks", stocks=[stock], query={"listType": "WATCHLIST"})
+
+    assert body["stocks"][0]["entry"]["price"] is None
+
+
+def test_the_52_week_range_uses_the_alias_the_frontend_expects() -> None:
+    """`to_camel` renders `range_52w` as `range52W`, which the frontend does not
+    read. The explicit alias is load-bearing."""
+    stock = build_stock(
+        "TOTS3",
+        list_type=ListType.WATCHLIST,
+        current=build_snapshot("TOTS3", TODAY, price=Decimal("30")),
+    )
+    history = [
+        build_snapshot("TOTS3", TODAY - dt.timedelta(days=n), price=Decimal(20 + n))
+        for n in range(1, 30)
+    ]
+
+    _, body = call(
+        "GET /stocks", stocks=[stock], snapshots=history, query={"listType": "WATCHLIST"}
+    )
+
+    assert "range52w" in body["stocks"][0]
+    assert body["stocks"][0]["range52w"]["low"] == "21"
