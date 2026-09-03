@@ -244,6 +244,9 @@ def list_watchlist(
                 entry=(
                     entry_price(evaluation.checks, price) if price is not None else EntryPrice()
                 ),
+                fair_value=stock.fair_value,
+                fair_value_source=stock.fair_value_source,
+                fair_value_on=stock.fair_value_on,
                 range_52w=(
                     price_range(snapshots, stock.ticker, price) if price is not None else None
                 ),

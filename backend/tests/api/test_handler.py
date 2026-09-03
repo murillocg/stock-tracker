@@ -516,3 +516,25 @@ def test_the_52_week_range_uses_the_alias_the_frontend_expects() -> None:
 
     assert "range52w" in body["stocks"][0]
     assert body["stocks"][0]["range52w"]["low"] == "21"
+
+
+def test_a_recorded_fair_value_reaches_the_watchlist() -> None:
+    """Regression: the field existed on the response model but nothing assigned
+    it, so it serialised as null and read as "no research recorded" while the
+    value sat in DynamoDB. A model field with no assignment fails silently."""
+    stock = build_stock(
+        "VIVA3",
+        list_type=ListType.WATCHLIST,
+        category=LynchCategory.STALWART,
+        current=build_snapshot("VIVA3", TODAY, price=Decimal("23.76"), pe=Decimal("9.53")),
+        fair_value=Decimal("30.14"),
+        fair_value_source="Analyst DCF",
+        fair_value_on=dt.date(2026, 9, 3),
+    )
+
+    _, body = call("GET /stocks", stocks=[stock], query={"listType": "WATCHLIST"})
+    item = body["stocks"][0]
+
+    assert item["fairValue"] == "30.14"
+    assert item["fairValueSource"] == "Analyst DCF"
+    assert item["fairValueOn"] == "2026-09-03"
