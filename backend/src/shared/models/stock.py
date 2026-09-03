@@ -81,6 +81,28 @@ class Stock(CamelModel):
     A provider value always wins over these — see `slow_grower`.
     """
 
+    fair_value: Decimal | None = None
+    fair_value_source: str | None = None
+    fair_value_on: dt.date | None = None
+    """A valuation from outside this app — an analyst's DCF, or your own.
+
+    Deliberately separate from the ceiling the rulesets derive, because the two
+    answer different questions and can disagree by a lot. The derived ceiling is
+    "the highest price at which my rules still say green"; a fair value is "what
+    the business is worth". For VIVA3 in September 2026 those were R$ 83,19 and
+    R$ 30,14 — a 2,8x gap, entirely explained by the growth assumption behind
+    each: PEG projects the trailing 33% CAGR forward, while the DCF decays growth
+    to 2,5% in perpetuity.
+
+    Recording it does not override anything. It sits beside the derived figure so
+    the disagreement is visible, which is the only honest way to show two numbers
+    that were produced by incompatible methods.
+
+    `fair_value_on` is not optional in spirit: a target price with no date is a
+    number with no shelf life, and the screen shows the date so the staleness is
+    yours to judge.
+    """
+
     current: DailySnapshot | None = None
     """Latest snapshot, denormalised onto the registry item.
 
@@ -99,6 +121,10 @@ class Stock(CamelModel):
         if self.foreign_business is not None:
             return self.foreign_business
         return self.market is not Market.B3
+
+    @field_serializer("fair_value_on")
+    def _serialise_fair_value_on(self, value: dt.date | None) -> str | None:
+        return None if value is None else value.isoformat()
 
     @field_serializer("manual_updated_on")
     def _serialise_manual_updated_on(self, value: dt.date | None) -> str | None:

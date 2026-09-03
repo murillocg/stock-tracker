@@ -107,6 +107,13 @@ class WatchlistItem(CamelModel):
     entry: EntryPrice
     """Where this stock's own rules would turn green."""
 
+    fair_value: Decimal | None = None
+    fair_value_source: str | None = None
+    fair_value_on: dt.date | None = None
+    """A valuation from outside the app, shown beside the derived ceiling rather
+    than blended with it. The two are produced by incompatible methods and their
+    disagreement is the informative part."""
+
     range_52w: PriceRange | None = Field(default=None, alias="range52w")
     """`None` until there is a year of history behind it.
 

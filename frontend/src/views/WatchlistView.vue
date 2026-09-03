@@ -105,6 +105,26 @@ function stillNeeds(item: WatchlistItem): string {
   return move !== null && isNegative(move) ? `needs ${num(move)}%` : ''
 }
 
+/** Provenance for a hand-entered valuation. A target with no date has no shelf life. */
+function fairValueHint(item: WatchlistItem): string {
+  const parts = [item.fairValueSource, item.fairValueOn && `as of ${item.fairValueOn}`]
+  return parts.filter(Boolean).join(' · ')
+}
+
+/**
+ * When the outside valuation and the derived ceiling disagree by a wide margin,
+ * say so. VIVA3's ceiling was 2,8x a published DCF — not because either was
+ * miscalculated, but because PEG projects trailing growth forward while a DCF
+ * decays it. Averaging them would hide exactly that.
+ */
+function valuationGap(item: WatchlistItem): string {
+  const { fairValue, entry } = item
+  if (!fairValue || !entry.price) return ''
+  const ratio = Number(entry.price) / Number(fairValue)
+  if (ratio < 1.5) return ''
+  return `your rules allow ${ratio.toFixed(1).replace('.', ',')}x the researched fair value`
+}
+
 function why(item: WatchlistItem): string {
   const { blockedBy, unbounded, price } = item.entry
   if (blockedBy.length) return `${blockedBy.join(', ')} — price cannot fix this`
@@ -116,6 +136,8 @@ function why(item: WatchlistItem): string {
   // has marked it down 48% in a year. When those two disagree this strongly,
   // one of them is wrong, and the screen should not pretend otherwise.
   const move = item.entry.discountNeeded
+  const gap = valuationGap(item)
+  if (gap) return gap
   if (move !== null && !isNegative(move) && Number(move) > 200) {
     return 'far under its limit — worth asking why the market disagrees'
   }
@@ -164,6 +186,7 @@ function why(item: WatchlistItem): string {
       <span></span>
       <span class="cell">price</span>
       <span class="cell">green below</span>
+      <span class="cell">fair value</span>
       <span class="cell">vs limit</span>
       <span class="cell l">52-week range</span>
       <span class="cell">6m</span>
@@ -189,6 +212,15 @@ function why(item: WatchlistItem): string {
       <span v-if="item.entry.price" class="cell price">
         <span class="currency">{{ symbol(item.currency) }}</span>
         {{ brl(item.entry.price) }}
+      </span>
+      <span v-else class="cell price is-empty">—</span>
+
+      <!-- Beside the derived ceiling, never averaged with it. The two come from
+           incompatible methods — a ruleset threshold and a discounted cash flow —
+           and where they disagree, that gap is the thing worth seeing. -->
+      <span v-if="item.fairValue" class="cell price fair" :title="fairValueHint(item)">
+        <span class="currency">{{ symbol(item.currency) }}</span>
+        {{ brl(item.fairValue) }}
       </span>
       <span v-else class="cell price is-empty">—</span>
 

@@ -135,6 +135,10 @@ export interface WatchlistItem {
   evaluation: Evaluation
   entry: EntryPrice
   range52w: PriceRange | null
+  /** A valuation from outside the app — shown beside the derived ceiling, never blended. */
+  fairValue: string | null
+  fairValueSource: string | null
+  fairValueOn: string | null
 }
 
 export interface CollectionStatus {

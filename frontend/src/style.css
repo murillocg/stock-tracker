@@ -353,7 +353,7 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
   display: grid;
   grid-template-columns:
     14px minmax(4.4rem, auto) minmax(6.5rem, auto)
-    6.6rem 6.6rem 5.6rem minmax(11rem, 1fr) 4.8rem;
+    6.6rem 6.6rem 6.6rem 5.6rem minmax(10rem, 1fr) 4.8rem;
   align-items: center;
   column-gap: .7rem;
   row-gap: .3rem;
@@ -382,6 +382,10 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
   font-size: .78rem;
   color: var(--muted);
 }
+
+/* A hand-entered valuation, marked as such: dotted underline says "someone
+   typed this", which is exactly the right amount of doubt. */
+.row.watch .price.fair { border-bottom: 1px dotted var(--border-strong); }
 
 .range { display: inline-flex; align-items: center; gap: .4rem; font-size: .72rem; color: var(--muted); }
 .range .track {
