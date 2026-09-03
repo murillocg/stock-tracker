@@ -74,23 +74,51 @@ const counts = computed(() => ({
 const symbol = (currency: string) => (currency === 'BRL' ? 'R$' : '$')
 
 /**
- * What the distance column says.
+ * How far the price sits from the limit, as one signed number.
  *
- * A stock already below its entry price technically has room to RISE and stay
- * green — PLPL3 could quadruple and its PEG would still pass. That number is
- * true and useless, so it is not shown: "at entry" is the whole message.
+ * The limit is a CEILING, not a target: below it your rules are green, above it
+ * they are not. An earlier version headed this column "entry" and showed "at
+ * entry" for everything underneath, which read as "you have not got there yet"
+ * when it meant the opposite — PLPL3 at R$ 7,61 against a limit of R$ 39,41 is
+ * not 80% short of interesting, it is 80% past it.
+ *
+ * One measure in both directions fixes that. Negative is under the limit and
+ * good; positive is over it and is the gap you are waiting on.
  */
-function distance(item: WatchlistItem): string {
+function versusLimit(item: WatchlistItem): string {
+  const price = item.current?.price
+  const limit = item.entry.price
+  if (!price || !limit) return '—'
+  const gap = (Number(price) / Number(limit) - 1) * 100
+  return `${gap >= 0 ? '+' : ''}${gap.toFixed(1).replace('.', ',')}%`
+}
+
+/**
+ * What still has to happen, for a stock priced above its limit.
+ *
+ * `discountNeeded` already carries it, and it is the more actionable half of
+ * the same fact: "needs a 20,8% fall" beats "26,2% over the limit" when the
+ * question is what you are waiting for.
+ */
+function stillNeeds(item: WatchlistItem): string {
   const move = item.entry.discountNeeded
-  if (move === null) return '—'
-  return isNegative(move) ? `${num(move)}%` : 'at entry'
+  return move !== null && isNegative(move) ? `needs ${num(move)}%` : ''
 }
 
 function why(item: WatchlistItem): string {
   const { blockedBy, unbounded, price } = item.entry
   if (blockedBy.length) return `${blockedBy.join(', ')} — price cannot fix this`
   if (price === null && unbounded.length) return `${unbounded.join(', ')} too far out to invert`
-  if (price === null) return 'not enough data to price an entry'
+  if (price === null) return 'not enough data to set a limit'
+
+  // A price far under the limit is not automatically a bargain. PLPL3 sits 81%
+  // below its own, on a PEG built from 26% earnings growth — while the market
+  // has marked it down 48% in a year. When those two disagree this strongly,
+  // one of them is wrong, and the screen should not pretend otherwise.
+  const move = item.entry.discountNeeded
+  if (move !== null && !isNegative(move) && Number(move) > 200) {
+    return 'far under its limit — worth asking why the market disagrees'
+  }
   return ''
 }
 </script>
@@ -105,9 +133,10 @@ function why(item: WatchlistItem): string {
     <CollectionLine v-if="collection" :collection="collection" />
 
     <p class="subtle intro">
-      The price at which each stock's own category rules would turn green.
-      Nothing here is owned, so there is no weight and no position &mdash; only
-      how far it is from being worth buying.
+      <b>Green below</b> is the highest price at which each stock still passes
+      its own category's rules &mdash; a ceiling, not a target. Under it is good;
+      the ones above it are what you are waiting on. Nothing here is owned, so
+      there is no weight and no position.
     </p>
 
     <nav class="tabs">
@@ -134,8 +163,8 @@ function why(item: WatchlistItem): string {
       <span></span>
       <span></span>
       <span class="cell">price</span>
-      <span class="cell">entry</span>
-      <span class="cell">distance</span>
+      <span class="cell">green below</span>
+      <span class="cell">vs limit</span>
       <span class="cell l">52-week range</span>
       <span class="cell">6m</span>
     </div>
@@ -163,7 +192,7 @@ function why(item: WatchlistItem): string {
       </span>
       <span v-else class="cell price is-empty">—</span>
 
-      <span class="cell distance">{{ distance(item) }}</span>
+      <span class="cell distance" :title="stillNeeds(item)">{{ versusLimit(item) }}</span>
 
       <span class="cell l">
         <RangeGauge v-if="item.range52w && item.current" :range="item.range52w" />

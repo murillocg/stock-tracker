@@ -369,7 +369,9 @@ p.footnote { margin: .5rem 0 0; font-size: .78rem; }
 
 .row.watch { padding: .6rem .25rem; border-bottom: 1px solid var(--border); }
 .row.watch .distance { font-variant-numeric: tabular-nums; font-weight: 600; }
-/* Amber, not red: needing a fall is the normal state of a watchlist, not a fault. */
+/* Amber, not red: sitting above your limit is the normal state of a watchlist,
+   not a fault — it is the reason the stock is on the list rather than in the
+   portfolio. Green means the price is already under the ceiling. */
 .row.watch.waiting .distance { color: var(--yellow); }
 .row.watch.at-entry .distance { color: var(--green); }
 .row.watch.no-entry .distance { color: var(--unknown); }
